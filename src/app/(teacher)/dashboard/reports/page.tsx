@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { motion } from "framer-motion";
 import { BarChart3, Trophy, Users, ShieldAlert, Award } from "lucide-react";
-import Link from "next/link";
+import { cn } from "@/lib/utils";
 
 export default function ReportsDashboard() {
   const [sessions, setSessions] = useState<any[]>([]);
