@@ -20,8 +20,10 @@ interface ParticipantHistory {
   id: string;
   score: number;
   session_id: string;
+  device_uuid?: string;
+  display_name?: string;
   joined_at: string;
-  live_sessions: { quizzes: { title: string } };
+  live_sessions: { quizzes: { title: string } } | null;
 }
 
 export default function UnifiedDashboard() {
@@ -60,13 +62,48 @@ export default function UnifiedDashboard() {
 
   const fetchHistory = async (userId: string) => {
     setLoadingHistory(true);
-    const { data } = await supabase
-      .from("participants")
-      .select("id, score, session_id, joined_at, live_sessions(quizzes(title))")
-      .eq("user_id", userId)
-      .order("joined_at", { ascending: false })
-      .limit(20);
-    if (data) setHistory(data as any);
+
+    const deviceUuid = typeof window !== "undefined" ? localStorage.getItem("kahoot_device_uuid") : null;
+
+    // participants does not include user_id in current schema; identify history by device UUID.
+    // For legacy data without a UUID match, fallback to display_name from profile.
+    let rows: any[] = [];
+
+    if (deviceUuid) {
+      const { data, error } = await supabase
+        .from("participants")
+        .select("id, score, session_id, joined_at, device_uuid, display_name, live_sessions(quizzes(title))")
+        .eq("device_uuid", deviceUuid)
+        .order("joined_at", { ascending: false })
+        .limit(20);
+
+      if (!error && data) {
+        rows = data;
+      }
+    }
+
+    if (rows.length === 0) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("display_name")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (profile?.display_name) {
+        const { data, error } = await supabase
+          .from("participants")
+          .select("id, score, session_id, joined_at, device_uuid, display_name, live_sessions(quizzes(title))")
+          .eq("display_name", profile.display_name)
+          .order("joined_at", { ascending: false })
+          .limit(20);
+
+        if (!error && data) {
+          rows = data;
+        }
+      }
+    }
+
+    setHistory(rows as ParticipantHistory[]);
     setLoadingHistory(false);
   };
 
