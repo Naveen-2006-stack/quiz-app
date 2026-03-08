@@ -7,7 +7,7 @@ import { useLiveSession } from "@/hooks/useLiveSession";
 import { useGameStore } from "@/store/useGameStore";
 import { ActiveQuestionCard } from "@/components/game/ActiveQuestionCard";
 import { motion, AnimatePresence } from "framer-motion";
-import { LayoutDashboard } from "lucide-react";
+import { LayoutDashboard, ArrowLeft } from "lucide-react";
 
 interface FloatingEmoji {
   id: string;
@@ -256,6 +256,32 @@ export default function StudentPlayRoom() {
     }
   };
 
+  // ── Feature: Leave Game (while in waiting room) ──
+  const handleLeaveGame = async () => {
+    if (!participantId || !sessionId) return;
+    try {
+      // 1. Database Cleanup
+      await supabase
+        .from("participants")
+        .delete()
+        .eq("id", participantId)
+        .eq("session_id", sessionId);
+
+      // 2. Realtime Cleanup
+      if (reactionChannelRef.current) {
+        supabase.removeChannel(reactionChannelRef.current);
+      }
+
+      // 3. State/Storage Cleanup
+      localStorage.removeItem("kahoot_device_uuid");
+
+      // 4. Routing
+      router.push("/dashboard");
+    } catch (error) {
+      console.error("Failed to leave game cleanly:", error);
+    }
+  };
+
   // ── Feature 4: Back to Dashboard (clears local game state) ──
   const handleBackToDashboard = () => {
     // Clear the device UUID so the player can join a fresh session next time
@@ -305,12 +331,26 @@ export default function StudentPlayRoom() {
         </AnimatePresence>
       </div>
       {/* Top Header */}
-      <header className="flex justify-between items-center mb-10">
-        <h1 className="text-xl font-bold text-slate-800 dark:text-white truncate">
+      <header className="flex justify-between items-center mb-10 w-full relative h-10">
+        <div className="flex-1 flex justify-start">
+          {sessionStatus === "waiting" && (
+            <button
+              onClick={handleLeaveGame}
+              className="flex items-center gap-2 text-sm font-medium text-slate-400 hover:text-rose-400 bg-slate-800/30 hover:bg-rose-500/10 px-4 py-2 rounded-full transition-colors border border-transparent hover:border-rose-500/30"
+            >
+              <ArrowLeft size={16} /> Leave Game
+            </button>
+          )}
+        </div>
+        
+        <h1 className="flex-1 text-xl font-bold text-slate-800 dark:text-white truncate text-center absolute left-1/2 -translate-x-1/2">
           {sessionInfo?.quizzes?.title}
         </h1>
-        <div className="px-4 py-1.5 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-100 dark:border-white/10 text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
-          {sessionStatus}
+        
+        <div className="flex-1 flex justify-end">
+          <div className="px-4 py-1.5 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-100 dark:border-white/10 text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+            {sessionStatus}
+          </div>
         </div>
       </header>
 
