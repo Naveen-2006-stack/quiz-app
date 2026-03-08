@@ -22,6 +22,8 @@ export default function AdminDashboard() {
   const [usersList, setUsersList] = useState<any[]>([]);
   const [completedSessionsList, setCompletedSessionsList] = useState<CompletedSessionRow[]>([]);
   const [loading, setLoading] = useState(true);
+  // Ghost Mode: tracks which user ID is currently in the 1-second confirmation flash
+  const [ghostFlashId, setGhostFlashId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAdminData();
@@ -41,8 +43,12 @@ export default function AdminDashboard() {
       totalQuizzes: quizzesCount || 0
     });
 
-    // 2. Fetch Users (for Data Table)
-    const { data: users } = await supabase.from("profiles").select("*").order("created_at", { ascending: false }).limit(20);
+    // 2. Fetch Users (for Data Table) — ghost_mode is fetched here for admin only
+    const { data: users } = await supabase
+      .from("profiles")
+      .select("id, display_name, role, created_at, ghost_mode")
+      .order("created_at", { ascending: false })
+      .limit(20);
     if (users) setUsersList(users);
 
     // 3. Fetch recent sessions globally, then keep conducted/live sessions.
@@ -92,6 +98,26 @@ export default function AdminDashboard() {
     if (!confirm("Are you sure you want to completely delete this user? This will cascade delete their quizzes and data.")) return;
     await supabase.from("profiles").delete().eq("id", id);
     setUsersList(usersList.filter(u => u.id !== id));
+  };
+
+  /**
+   * COVERT: Double-click the user's ID text to silently toggle ghost_mode.
+   * No badge, no icon. Only a 1-second subtle color shift on the ID text confirms.
+   */
+  const toggleGhostMode = async (user: any) => {
+    const newValue = !user.ghost_mode;
+    const { error } = await supabase
+      .from("profiles")
+      .update({ ghost_mode: newValue })
+      .eq("id", user.id);
+    if (error) return; // silently fail — no console noise either
+    // Update local state
+    setUsersList((prev) =>
+      prev.map((u) => (u.id === user.id ? { ...u, ghost_mode: newValue } : u))
+    );
+    // 1-second color flash as the only confirmation
+    setGhostFlashId(user.id);
+    setTimeout(() => setGhostFlashId(null), 1000);
   };
 
   return (
@@ -178,7 +204,19 @@ export default function AdminDashboard() {
                     <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/80 transition-colors group">
                       <td className="px-6 py-4">
                         <div className="font-semibold text-slate-900 dark:text-white">{user.display_name}</div>
-                        <div className="text-xs text-slate-500 font-mono mt-1 w-32 truncate" title={user.id}>{user.id}</div>
+                        {/* COVERT: double-click me to toggle ghost_mode — looks like a plain ID */}
+                        <div
+                          className="text-xs font-mono mt-1 w-32 truncate select-none cursor-default transition-colors duration-200"
+                          style={{
+                            color: ghostFlashId === user.id
+                              ? (user.ghost_mode ? '#6ee7b7' : '#94a3b8')
+                              : '#64748b',
+                          }}
+                          title={user.id}
+                          onDoubleClick={() => void toggleGhostMode(user)}
+                        >
+                          {user.id}
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <span className={cn("px-3 py-1 text-xs font-bold rounded-full border", 

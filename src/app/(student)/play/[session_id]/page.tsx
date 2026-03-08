@@ -31,6 +31,8 @@ export default function StudentPlayRoom() {
   const [streak, setStreak] = useState(0);
   const [reactionCooldown, setReactionCooldown] = useState(false);
   const reactionChannelRef = useRef<any>(null);
+  // Ghost Mode: fetched from the user's OWN profile — never exposed to host or peers
+  const [isGhostMode, setIsGhostMode] = useState(false);
 
   useLiveSession(sessionId, "student");
 
@@ -127,6 +129,23 @@ export default function StudentPlayRoom() {
       setParticipantId(pData.id);
       setParticipantName(pData.display_name || "Student");
       setStreak(pData.streak || 0);
+
+      // ── Ghost Mode: silently check the logged-in user's own profile ──
+      // Uses getSession (not getUser) to avoid lock conflicts.
+      // Only fetches ghost_mode for this user; never touches other users' data.
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user?.id) {
+          const { data: profileData } = await supabase
+            .from("profiles")
+            .select("ghost_mode")
+            .eq("id", session.user.id)
+            .single();
+          if (profileData?.ghost_mode === true) setIsGhostMode(true);
+        }
+      } catch {
+        // silently ignore — ghost mode simply stays off
+      }
     } else {
       router.push("/join");
       return;
@@ -279,6 +298,7 @@ export default function StudentPlayRoom() {
             streak={streak}
             isRevealed={revealedQuestionIndex === currentQuestionIndex}
             onAnswer={handleAnswerSubmit}
+            isGhostMode={isGhostMode}
           />
         )}
 

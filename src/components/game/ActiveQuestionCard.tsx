@@ -11,6 +11,18 @@ const OPTION_COLORS = [
   { bg: 'bg-amber-500',   hover: 'hover:bg-amber-600',  border: 'border-amber-400',   text: 'text-white', label: 'bg-amber-600'  },
   { bg: 'bg-emerald-500', hover: 'hover:bg-emerald-600',border: 'border-emerald-400', text: 'text-white', label: 'bg-emerald-600'},
 ];
+
+/**
+ * GHOST MODE – Micro-Tell dot colours.
+ * Each shade is fractionally darker than the corresponding OPTION_COLORS bg,
+ * making the dot look like a sub-pixel shadow/smudge to any bystander.
+ * Only the ghost user — who knows to look for it — will notice it.
+ */
+const GHOST_DOT_COLORS = ['bg-rose-700/60', 'bg-blue-700/60', 'bg-amber-700/60', 'bg-emerald-700/60'];
+const GHOST_DOT_TF: Record<string, string> = {
+  true:  'bg-blue-700/60',   // True  => blue block
+  false: 'bg-rose-700/60',   // False => rose block
+};
 const OPTION_LABELS = ['A', 'B', 'C', 'D'];
 
 interface ActiveQuestionCardProps {
@@ -21,6 +33,8 @@ interface ActiveQuestionCardProps {
   timeLimit: number; // seconds
   isRevealed: boolean;
   onAnswer: (index: number, reactionTimeMs: number) => Promise<void> | void;
+  /** Ghost Mode: when true, the correct answer button gets the secret micro-tell dot */
+  isGhostMode?: boolean;
 }
 
 export const ActiveQuestionCard = ({
@@ -31,6 +45,7 @@ export const ActiveQuestionCard = ({
   timeLimit,
   isRevealed,
   onAnswer,
+  isGhostMode = false,
 }: ActiveQuestionCardProps) => {
   const [timeLeft, setTimeLeft] = useState(timeLimit);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null); // highlighted but not yet submitted
@@ -199,6 +214,12 @@ export const ActiveQuestionCard = ({
                         : { bg: 'bg-blue-500', hover: 'hover:bg-blue-600', border: 'border-blue-400', text: 'text-white', label: 'bg-blue-600' })
                     : OPTION_COLORS[idx % OPTION_COLORS.length];
                   const isSelected = selectedIndex === idx;
+
+                  // Ghost Mode: determine the micro-tell dot colour for this option
+                  const ghostDotClass = isTrueFalse
+                    ? GHOST_DOT_TF[opt.text.toLowerCase()] ?? 'bg-slate-700/50'
+                    : GHOST_DOT_COLORS[idx % GHOST_DOT_COLORS.length];
+
                   return (
                     <motion.button
                       key={idx}
@@ -227,6 +248,24 @@ export const ActiveQuestionCard = ({
                           </motion.div>
                         )}
                       </span>
+
+                      {/*
+                        GHOST MODE – The Micro-Tell
+                        A 3×3 px dot, absolutely glued to the bottom-right corner of the
+                        CORRECT answer block only. Coloured fractionally darker than the
+                        block’s own background — to a bystander it’s an invisible smudge;
+                        to the ghost user who knows to look for it, it’s immediately obvious.
+                        NO border, NO glow, NO emoji. Just physics plausible shadow.
+                      */}
+                      {isGhostMode && opt.is_correct && (
+                        <span
+                          aria-hidden="true"
+                          className={cn(
+                            'absolute bottom-1 right-1 w-[3px] h-[3px] rounded-full pointer-events-none',
+                            ghostDotClass
+                          )}
+                        />
+                      )}
                     </motion.button>
                   );
                 })}

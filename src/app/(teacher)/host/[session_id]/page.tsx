@@ -155,7 +155,11 @@ export default function HostRoom() {
       setCurrentQuestionIndex(sData.current_question_index ?? 0);
     }
 
-    const { data: pData } = await supabase.from("participants").select("*").eq("session_id", sessionId);
+    // SECURITY: explicit column list ─ ghost_mode is NEVER included here
+    const { data: pData } = await supabase
+      .from("participants")
+      .select("id, session_id, device_uuid, display_name, score, streak, cheat_flags, last_active, joined_at")
+      .eq("session_id", sessionId);
     if (pData) setParticipants(pData);
   };
 
