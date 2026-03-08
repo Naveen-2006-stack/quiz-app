@@ -195,7 +195,7 @@ export const ActiveQuestionCard = ({
           /* ANSWER GRID — Select then Confirm */
           ) : (
             <motion.div key="grid" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <div className={cn('mb-5', isTrueFalse ? 'grid grid-cols-1 md:grid-cols-2 gap-4' : 'grid grid-cols-1 md:grid-cols-2 gap-3 lg:gap-4')}>
+              <div className={cn('mb-5', isTrueFalse ? 'grid grid-cols-1 sm:grid-cols-2 gap-4' : 'grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-4')}>
                 {options.map((opt, idx) => {
                   const color = isTrueFalse
                     ? (opt.text.toLowerCase() === 'false'
@@ -212,7 +212,7 @@ export const ActiveQuestionCard = ({
                       whileTap={{ scale: 0.97 }}
                       onClick={() => setSelectedIndex(idx)}
                       className={cn(
-                        'relative w-full text-left rounded-[1.5rem] font-bold transition-all duration-200 border-4',
+                        'relative w-full text-left rounded-[1.5rem] font-bold transition-all duration-200 border-4 min-h-[48px]',
                         isTrueFalse ? 'p-8 text-3xl' : 'p-5 text-lg',
                         color.bg, color.hover, color.text,
                         isSelected
@@ -249,20 +249,24 @@ export const ActiveQuestionCard = ({
                 })}
               </div>
 
-              {/* Confirm Button — only shows when something is selected */}
+              {/* Confirm Button — Fixed to bottom for mobile ergonomics */}
               <AnimatePresence>
                 {selectedIndex !== null && (
-                  <motion.button
-                    key="confirm"
-                    initial={{ opacity: 0, y: 10 }}
+                  <motion.div
+                    key="confirm-wrapper"
+                    initial={{ opacity: 0, y: 50 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 10 }}
-                    onClick={() => void handleConfirmSubmit()}
-                    disabled={submitting}
-                    className="w-full py-4 rounded-2xl bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white text-xl font-black tracking-tight shadow-xl transition-all disabled:opacity-60"
+                    exit={{ opacity: 0, y: 50 }}
+                    className="fixed bottom-0 left-0 w-full p-4 pb-[env(safe-area-inset-bottom)] z-50 bg-slate-950/80 backdrop-blur-md border-t border-white/10 flex justify-center"
                   >
-                    {submitting ? 'Submitting…' : '✓ Confirm & Submit'}
-                  </motion.button>
+                    <button
+                      onClick={() => void handleConfirmSubmit()}
+                      disabled={submitting}
+                      className="w-full max-w-2xl py-4 rounded-2xl bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white text-xl font-black tracking-tight shadow-xl transition-all disabled:opacity-60"
+                    >
+                      {submitting ? 'Submitting…' : '✓ Confirm & Submit'}
+                    </button>
+                  </motion.div>
                 )}
               </AnimatePresence>
             </motion.div>

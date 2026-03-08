@@ -50,14 +50,17 @@ export default function StudentPlayRoom() {
     initPlayRoom();
   }, [sessionId]);
 
-  // Anti-cheat: tab switch detection
+  // Anti-cheat: tab switch detection (Hardened for Mobile Browsers)
   useEffect(() => {
     if (!sessionId) return;
 
     const gameRoomChannel = supabase.channel(`game-room:${sessionId}`).subscribe();
 
     const onVisibilityChange = async () => {
-      if (!document.hidden || !participantId) return;
+      // If document is hidden OR window lost focus, it's a cheat violation
+      if (!document.hidden && document.hasFocus()) return;
+      if (!participantId) return;
+
       await gameRoomChannel.send({
         type: "broadcast",
         event: "anti_cheat_violation",
@@ -67,8 +70,11 @@ export default function StudentPlayRoom() {
     };
 
     document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("blur", onVisibilityChange);
+
     return () => {
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("blur", onVisibilityChange);
       void supabase.removeChannel(gameRoomChannel);
     };
   }, [sessionId, participantId, participantName]);
@@ -309,7 +315,7 @@ export default function StudentPlayRoom() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex flex-col p-4 md:p-8 pt-20 md:pt-24">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex flex-col p-4 md:p-8 pt-20 md:pt-24 select-none">
 
       {/* ── Universal floating emoji overlay (mirrors Host screen) ── */}
       <div className="pointer-events-none fixed inset-0 z-[60] overflow-hidden">
@@ -392,7 +398,7 @@ export default function StudentPlayRoom() {
                   className="text-2xl hover:scale-125 transition-transform cursor-pointer active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                   aria-label={`Send ${emoji} reaction`}
                 >
-                  {emoji}
+                  <span className="pointer-events-none">{emoji}</span>
                 </button>
               ))}
             </div>
