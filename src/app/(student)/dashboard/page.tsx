@@ -85,12 +85,30 @@ export default function UnifiedDashboard() {
 
   const createNewQuiz = async () => {
     if (!user) return;
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("quizzes")
       .insert([{ title: "Untitled Quiz", description: "", teacher_id: user.id }])
-      .select()
+      .select("id")
       .single();
-    if (data) router.push(`/quiz/${data.id}/edit`);
+
+    if (error) {
+      return;
+    }
+
+    // Fallback in case insert succeeds but returned row is empty due policy constraints.
+    let newQuizId = data?.id;
+    if (!newQuizId) {
+      const { data: fallbackQuiz } = await supabase
+        .from("quizzes")
+        .select("id")
+        .eq("teacher_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      newQuizId = fallbackQuiz?.id;
+    }
+
+    if (newQuizId) router.push(`/quiz/${newQuizId}/edit`);
   };
 
   const deleteQuiz = async (id: string) => {

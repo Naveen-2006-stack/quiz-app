@@ -75,11 +75,28 @@ export default function TeacherDashboard() {
     const { data, error } = await supabase
       .from('quizzes')
       .insert([{ title: 'Untitled Quiz', description: '', teacher_id: user.id }])
-      .select()
+      .select('id')
       .single();
 
-    if (data) {
-      router.push(`/quiz/${data.id}/edit`);
+    if (error) {
+      return;
+    }
+
+    // RLS can allow insert but occasionally return no selected row; fallback to latest quiz.
+    let newQuizId = data?.id;
+    if (!newQuizId) {
+      const { data: fallbackQuiz } = await supabase
+        .from('quizzes')
+        .select('id')
+        .eq('teacher_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      newQuizId = fallbackQuiz?.id;
+    }
+
+    if (newQuizId) {
+      router.push(`/quiz/${newQuizId}/edit`);
     }
   };
 
@@ -246,10 +263,12 @@ export default function TeacherDashboard() {
                     </motion.button>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Link href={`/quiz/${quiz.id}/edit`}>
-                      <button className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-xl transition-colors" title="Edit Quiz">
-                        <Edit3 size={20} />
-                      </button>
+                    <Link
+                      href={`/quiz/${quiz.id}/edit`}
+                      className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-xl transition-colors"
+                      title="Edit Quiz"
+                    >
+                      <Edit3 size={20} />
                     </Link>
                     <button onClick={() => deleteQuiz(quiz.id)} className="p-2.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-colors" title="Delete Quiz">
                       <Trash2 size={20} />
