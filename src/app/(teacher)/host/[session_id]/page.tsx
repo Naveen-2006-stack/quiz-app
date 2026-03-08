@@ -224,6 +224,10 @@ export default function HostRoom() {
     router.push("/dashboard");
   };
 
+  const handleViewReport = () => {
+    router.push(`/dashboard/reports/${sessionId}`);
+  };
+
   const participantsList = Object.values(participantsMap);
   const totalPlayers = participantsList.length;
 
@@ -339,12 +343,20 @@ export default function HostRoom() {
             <div className="text-6xl mb-4">🏆</div>
             <h2 className="text-5xl font-black text-slate-900 dark:text-white mb-3">Final Standings</h2>
             <p className="text-slate-500 dark:text-slate-400 mb-8">The game has concluded. Great job everyone!</p>
-            <button
-              onClick={handleBackToDashboard}
-              className="inline-flex items-center gap-2 px-8 py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-lg shadow-indigo-600/20 transition-all"
-            >
-              <LayoutDashboard size={20} /> Back to Dashboard
-            </button>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={handleViewReport}
+                className="inline-flex items-center gap-2 px-8 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-lg shadow-emerald-600/20 transition-all"
+              >
+                View Full Report
+              </button>
+              <button
+                onClick={handleBackToDashboard}
+                className="inline-flex items-center gap-2 px-8 py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-lg shadow-indigo-600/20 transition-all"
+              >
+                <LayoutDashboard size={20} /> Back to Dashboard
+              </button>
+            </div>
           </div>
         )}
 
