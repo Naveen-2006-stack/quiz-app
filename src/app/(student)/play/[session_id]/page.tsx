@@ -95,7 +95,37 @@ export default function StudentPlayRoom() {
       })
       .subscribe();
     reactionChannelRef.current = gameEmojiChannel;
+
+    // ── Ghost mode mid-game sync ──
+    // Listen for changes to the logged-in user's own profile only
+    const updateGhostMode = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) return;
+      const profileChannel = supabase
+        .channel(`ghost-sync-${session.user.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "profiles",
+            filter: `id=eq.${session.user.id}`
+          },
+          (payload) => {
+            if (payload.new && 'ghost_mode' in payload.new) {
+              setIsGhostMode(!!payload.new.ghost_mode);
+            }
+          }
+        )
+        .subscribe();
+      reactionChannelRef.current.profileChannel = profileChannel;
+    };
+    void updateGhostMode();
+
     return () => {
+      if (reactionChannelRef.current?.profileChannel) {
+        void supabase.removeChannel(reactionChannelRef.current.profileChannel);
+      }
       reactionChannelRef.current = null;
       void supabase.removeChannel(gameEmojiChannel);
     };
@@ -156,21 +186,17 @@ export default function StudentPlayRoom() {
       setParticipantName(pData.display_name || "Student");
       setStreak(pData.streak || 0);
 
-      // ── Ghost Mode: silently check the logged-in user's own profile ──
-      // Uses getSession (not getUser) to avoid lock conflicts.
-      // Only fetches ghost_mode for this user; never touches other users' data.
+      // ── Ghost Mode: Check using the secure RPC ──
+      // This works for ALL players securely using their device_uuid,
+      // avoiding the fragility of auth.getSession() for guest players.
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user?.id) {
-          const { data: profileData } = await supabase
-            .from("profiles")
-            .select("ghost_mode")
-            .eq("id", session.user.id)
-            .single();
-          if (profileData?.ghost_mode === true) setIsGhostMode(true);
-        }
-      } catch {
-        // silently ignore — ghost mode simply stays off
+        const { data: isGhost } = await supabase.rpc("get_ghost_mode_for_participant", {
+          p_session_id: sessionId,
+          p_device_uuid: uuid
+        });
+        setIsGhostMode(!!isGhost);
+      } catch (err) {
+        console.error("Ghost mode check failed:", err);
       }
     } else {
       router.push("/join");

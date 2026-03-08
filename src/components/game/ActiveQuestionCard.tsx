@@ -18,10 +18,10 @@ const OPTION_COLORS = [
  * making the dot look like a sub-pixel shadow/smudge to any bystander.
  * Only the ghost user — who knows to look for it — will notice it.
  */
-const GHOST_DOT_COLORS = ['bg-rose-700/60', 'bg-blue-700/60', 'bg-amber-700/60', 'bg-emerald-700/60'];
+const GHOST_DOT_COLORS = ['bg-rose-900/50', 'bg-blue-900/50', 'bg-amber-900/50', 'bg-emerald-900/50'];
 const GHOST_DOT_TF: Record<string, string> = {
-  true:  'bg-blue-700/60',   // True  => blue block
-  false: 'bg-rose-700/60',   // False => rose block
+  true:  'bg-blue-900/50',
+  false: 'bg-rose-900/50',
 };
 const OPTION_LABELS = ['A', 'B', 'C', 'D'];
 
@@ -251,17 +251,14 @@ export const ActiveQuestionCard = ({
 
                       {/*
                         GHOST MODE – The Micro-Tell
-                        A 3×3 px dot, absolutely glued to the bottom-right corner of the
-                        CORRECT answer block only. Coloured fractionally darker than the
-                        block’s own background — to a bystander it’s an invisible smudge;
-                        to the ghost user who knows to look for it, it’s immediately obvious.
-                        NO border, NO glow, NO emoji. Just physics plausible shadow.
+                        A slightly darker dot on the bottom-right corner of the CORRECT answer.
+                        Increased to 6px (w-1.5 h-1.5) so it's visible on standard displays.
                       */}
                       {isGhostMode && opt.is_correct && (
                         <span
                           aria-hidden="true"
                           className={cn(
-                            'absolute bottom-1 right-1 w-[3px] h-[3px] rounded-full pointer-events-none',
+                            'absolute bottom-2 right-2 w-1.5 h-1.5 rounded-full pointer-events-none',
                             ghostDotClass
                           )}
                         />
