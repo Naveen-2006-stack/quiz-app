@@ -24,7 +24,33 @@ interface ParticipantHistory {
   display_name?: string;
   joined_at: string;
   live_sessions: { quizzes: { title: string } } | null;
+  rank?: number;
 }
+
+const formatOrdinal = (n: number) => {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${n}st`;
+  if (mod10 === 2 && mod100 !== 12) return `${n}nd`;
+  if (mod10 === 3 && mod100 !== 13) return `${n}rd`;
+  return `${n}th`;
+};
+
+const getRankPresentation = (rank?: number) => {
+  if (!rank) {
+    return { label: "Unranked", colorClass: "text-slate-400 dark:text-slate-500" };
+  }
+  if (rank === 1) {
+    return { label: "🥇 1st Place", colorClass: "text-amber-400" };
+  }
+  if (rank === 2) {
+    return { label: "🥈 2nd Place", colorClass: "text-slate-300" };
+  }
+  if (rank === 3) {
+    return { label: "🥉 3rd Place", colorClass: "text-amber-700 dark:text-amber-600" };
+  }
+  return { label: `${formatOrdinal(rank)} Place`, colorClass: "text-slate-400" };
+};
 
 export default function UnifiedDashboard() {
   const router = useRouter();
@@ -103,7 +129,41 @@ export default function UnifiedDashboard() {
       }
     }
 
-    setHistory(rows as ParticipantHistory[]);
+    const baseRows = rows as ParticipantHistory[];
+
+    if (baseRows.length > 0) {
+      const sessionIds = Array.from(new Set(baseRows.map((row) => row.session_id)));
+
+      const { data: sessionParticipants } = await supabase
+        .from("participants")
+        .select("id, session_id, score")
+        .in("session_id", sessionIds);
+
+      const participantsBySession = new Map<string, Array<{ id: string; score: number }>>();
+      (sessionParticipants || []).forEach((p: any) => {
+        const list = participantsBySession.get(p.session_id) || [];
+        list.push({ id: p.id, score: p.score || 0 });
+        participantsBySession.set(p.session_id, list);
+      });
+
+      participantsBySession.forEach((list, sessionId) => {
+        list.sort((a, b) => b.score - a.score);
+        participantsBySession.set(sessionId, list);
+      });
+
+      const withRank = baseRows.map((row) => {
+        const leaderboard = participantsBySession.get(row.session_id) || [];
+        const index = leaderboard.findIndex((p) => p.id === row.id);
+        return {
+          ...row,
+          rank: index >= 0 ? index + 1 : undefined,
+        };
+      });
+
+      setHistory(withRank);
+    } else {
+      setHistory(baseRows);
+    }
     setLoadingHistory(false);
   };
 
@@ -227,7 +287,9 @@ export default function UnifiedDashboard() {
             </div>
           ) : (
             <AnimatePresence>
-              {history.map((entry, idx) => (
+              {history.map((entry, idx) => {
+                const rankView = getRankPresentation(entry.rank);
+                return (
                 <motion.div
                   key={entry.id}
                   initial={{ opacity: 0, y: 10 }}
@@ -246,11 +308,17 @@ export default function UnifiedDashboard() {
                       <Clock size={12} /> {new Date(entry.joined_at).toLocaleDateString()}
                     </div>
                   </div>
-                  <div className="text-2xl font-black text-indigo-600 dark:text-indigo-400 shrink-0">
-                    {entry.score.toLocaleString()} pts
+                  <div className="shrink-0 text-right">
+                    <div className="text-2xl font-black text-indigo-600 dark:text-indigo-400 leading-none">
+                      {entry.score.toLocaleString()} pts
+                    </div>
+                    <div className={`mt-1 text-sm font-semibold ${rankView.colorClass}`}>
+                      {rankView.label}
+                    </div>
                   </div>
                 </motion.div>
-              ))}
+                );
+              })}
             </AnimatePresence>
           )}
         </div>
