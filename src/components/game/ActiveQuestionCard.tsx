@@ -15,6 +15,7 @@ const OPTION_LABELS = ['A', 'B', 'C', 'D'];
 
 interface ActiveQuestionCardProps {
   question: string;
+  questionType?: 'mcq' | 'true_false';
   options: { text: string; is_correct: boolean }[];
   streak: number;
   timeLimit: number; // seconds
@@ -24,6 +25,7 @@ interface ActiveQuestionCardProps {
 
 export const ActiveQuestionCard = ({
   question,
+  questionType = 'mcq',
   options,
   streak,
   timeLimit,
@@ -84,6 +86,7 @@ export const ActiveQuestionCard = ({
       ? !!options[selectedIndex]?.is_correct
       : false;
   const showReveal = isRevealed && hasSubmitted;
+  const isTrueFalse = questionType === 'true_false';
   const timeFraction = timeLeft / timeLimit;
   const timerColor =
     timeFraction > 0.5 ? 'bg-emerald-500' : timeFraction > 0.25 ? 'bg-amber-500' : 'bg-rose-500';
@@ -188,9 +191,13 @@ export const ActiveQuestionCard = ({
           /* ANSWER GRID — Select then Confirm */
           ) : (
             <motion.div key="grid" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:gap-4 mb-5">
+              <div className={cn('mb-5', isTrueFalse ? 'grid grid-cols-1 md:grid-cols-2 gap-4' : 'grid grid-cols-1 md:grid-cols-2 gap-3 lg:gap-4')}>
                 {options.map((opt, idx) => {
-                  const color = OPTION_COLORS[idx % OPTION_COLORS.length];
+                  const color = isTrueFalse
+                    ? (opt.text.toLowerCase() === 'false'
+                        ? { bg: 'bg-rose-500', hover: 'hover:bg-rose-600', border: 'border-rose-400', text: 'text-white', label: 'bg-rose-600' }
+                        : { bg: 'bg-blue-500', hover: 'hover:bg-blue-600', border: 'border-blue-400', text: 'text-white', label: 'bg-blue-600' })
+                    : OPTION_COLORS[idx % OPTION_COLORS.length];
                   const isSelected = selectedIndex === idx;
                   return (
                     <motion.button
@@ -199,7 +206,8 @@ export const ActiveQuestionCard = ({
                       whileTap={{ scale: 0.97 }}
                       onClick={() => setSelectedIndex(idx)}
                       className={cn(
-                        'relative w-full text-left p-5 rounded-[1.5rem] font-bold text-lg transition-all duration-200 border-4',
+                        'relative w-full text-left rounded-[1.5rem] font-bold transition-all duration-200 border-4',
+                        isTrueFalse ? 'p-8 text-3xl' : 'p-5 text-lg',
                         color.bg, color.hover, color.text,
                         isSelected
                           ? `${color.border} ring-4 ring-white/40 scale-[1.02] shadow-xl`
@@ -207,9 +215,11 @@ export const ActiveQuestionCard = ({
                       )}
                     >
                       <span className="flex items-center gap-4">
-                        <span className={cn('flex items-center justify-center w-10 h-10 rounded-xl text-sm font-black shrink-0', color.label)}>
-                          {OPTION_LABELS[idx]}
-                        </span>
+                        {!isTrueFalse && (
+                          <span className={cn('flex items-center justify-center w-10 h-10 rounded-xl text-sm font-black shrink-0', color.label)}>
+                            {OPTION_LABELS[idx]}
+                          </span>
+                        )}
                         <span className="flex-1 leading-tight">{opt.text}</span>
                         {isSelected && (
                           <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>

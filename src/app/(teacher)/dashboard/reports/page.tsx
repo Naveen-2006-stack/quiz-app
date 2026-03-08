@@ -18,7 +18,7 @@ export default function ReportsDashboard() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Fetch finished sessions and inner join quizzes and participants
+    // Fetch live + completed sessions and inner join quizzes and participants
     const { data } = await supabase
       .from("live_sessions")
       .select(`
@@ -27,8 +27,8 @@ export default function ReportsDashboard() {
         participants(id, display_name, score, cheat_flags)
       `)
       .eq("teacher_id", user.id)
-      .eq("status", "finished")
-      .order("finished_at", { ascending: false });
+      .in("status", ["active", "finished", "completed"])
+      .order("started_at", { ascending: false });
 
     if (data) setSessions(data);
     setLoading(false);
@@ -69,7 +69,7 @@ export default function ReportsDashboard() {
                   <div>
                     <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-1">{sess.quizzes?.title || "Unknown Quiz"}</h3>
                     <p className="text-sm font-medium text-slate-500">
-                      Played on {new Date(sess.finished_at).toLocaleString()}
+                      {sess.status === "active" ? "Live now" : "Played on"} {new Date(sess.finished_at || sess.started_at || Date.now()).toLocaleString()}
                     </p>
                   </div>
                   <div className="flex flex-col items-start gap-2 sm:items-end">

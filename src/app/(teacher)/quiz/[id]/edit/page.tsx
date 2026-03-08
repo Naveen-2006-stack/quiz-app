@@ -8,8 +8,21 @@ import { Save, Plus, Trash2, ArrowLeft, GripVertical, CheckCircle2 } from "lucid
 import Link from "next/link";
 
 interface Option { text: string; is_correct: boolean; }
-interface Question { id: string; question_text: string; time_limit: number; base_points: number; options: Option[]; order_index: number; _isNew?: boolean; }
+type QuestionType = "mcq" | "true_false";
+interface Question { id: string; question_text: string; question_type: QuestionType; time_limit: number; base_points: number; options: Option[]; order_index: number; _isNew?: boolean; }
 interface Quiz { id: string; title: string; description: string; }
+
+const MCQ_DEFAULT_OPTIONS: Option[] = [
+  { text: "", is_correct: true },
+  { text: "", is_correct: false },
+  { text: "", is_correct: false },
+  { text: "", is_correct: false },
+];
+
+const TRUE_FALSE_OPTIONS: Option[] = [
+  { text: "True", is_correct: true },
+  { text: "False", is_correct: false },
+];
 
 export default function QuizEditor() {
   const router = useRouter();
@@ -32,22 +45,25 @@ export default function QuizEditor() {
 
     // 2. Fetch Questions
     const { data: qsData } = await supabase.from("questions").select("*").eq("quiz_id", quizId).order("order_index");
-    if (qsData) setQuestions(qsData);
+    if (qsData) {
+      const normalized = (qsData as any[]).map((q) => ({
+        ...q,
+        question_type: (q.question_type || "mcq") as QuestionType,
+        options: Array.isArray(q.options) ? q.options : MCQ_DEFAULT_OPTIONS,
+      }));
+      setQuestions(normalized as Question[]);
+    }
   };
 
   const addQuestion = () => {
     const newQ: Question = {
       id: crypto.randomUUID(), // Temp ID for React key
       question_text: "",
+      question_type: "mcq",
       time_limit: 20,
-      base_points: 1000,
+      base_points: 100,
       order_index: questions.length,
-      options: [
-        { text: "", is_correct: true },
-        { text: "", is_correct: false },
-        { text: "", is_correct: false },
-        { text: "", is_correct: false }
-      ],
+      options: MCQ_DEFAULT_OPTIONS,
       _isNew: true
     };
     setQuestions([...questions, newQ]);
@@ -68,6 +84,38 @@ export default function QuizEditor() {
   const setCorrectOption = (qIndex: number, oIndex: number) => {
     const updated = [...questions];
     updated[qIndex].options = updated[qIndex].options.map((opt, i) => ({ ...opt, is_correct: i === oIndex }));
+    setQuestions(updated);
+  };
+
+  const setQuestionType = (qIndex: number, nextType: QuestionType) => {
+    const updated = [...questions];
+    const current = updated[qIndex];
+
+    if (nextType === "true_false") {
+      const currentlyCorrect = current.options.findIndex((o) => o.is_correct);
+      updated[qIndex] = {
+        ...current,
+        question_type: "true_false",
+        options: [
+          { text: "True", is_correct: currentlyCorrect <= 0 },
+          { text: "False", is_correct: currentlyCorrect === 1 },
+        ],
+      };
+    } else {
+      const prev = current.options;
+      const padded = [
+        prev[0] || { text: "", is_correct: true },
+        prev[1] || { text: "", is_correct: false },
+        prev[2] || { text: "", is_correct: false },
+        prev[3] || { text: "", is_correct: false },
+      ];
+      updated[qIndex] = {
+        ...current,
+        question_type: "mcq",
+        options: padded,
+      };
+    }
+
     setQuestions(updated);
   };
 
@@ -96,6 +144,7 @@ export default function QuizEditor() {
         const payload = {
           quiz_id: quizId,
           question_text: q.question_text,
+          question_type: q.question_type || "mcq",
           time_limit: q.time_limit,
           base_points: q.base_points,
           options: q.options,
@@ -212,6 +261,17 @@ export default function QuizEditor() {
                   {/* Settings Row: Time & Points */}
                   <div className="flex flex-wrap gap-4">
                     <div className="flex items-center gap-2 bg-gray-50 dark:bg-slate-900 px-4 py-2 rounded-xl border border-gray-200 dark:border-white/10">
+                      <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Type:</span>
+                      <select
+                        value={q.question_type || "mcq"}
+                        onChange={e => setQuestionType(qIdx, e.target.value as QuestionType)}
+                        className="bg-transparent text-slate-900 dark:text-white font-semibold outline-none cursor-pointer"
+                      >
+                        <option value="mcq">Multiple Choice</option>
+                        <option value="true_false">True / False</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2 bg-gray-50 dark:bg-slate-900 px-4 py-2 rounded-xl border border-gray-200 dark:border-white/10">
                       <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Time Limit:</span>
                       <select
                         value={q.time_limit} onChange={e => updateQuestion(qIdx, "time_limit", parseInt(e.target.value))}
@@ -226,38 +286,63 @@ export default function QuizEditor() {
                         value={q.base_points} onChange={e => updateQuestion(qIdx, "base_points", parseInt(e.target.value))}
                         className="bg-transparent text-slate-900 dark:text-white font-semibold outline-none cursor-pointer"
                       >
-                        {[500, 1000, 2000].map(p => <option key={p} value={p}>{p}</option>)}
+                        {[50, 100, 200].map(p => <option key={p} value={p}>{p}</option>)}
                       </select>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Options Grid */}
-              <div className="ml-9 grid grid-cols-1 md:grid-cols-2 gap-4">
-                {q.options.map((opt, oIdx) => (
-                  <div
-                    key={oIdx}
-                    className={`relative flex items-center p-2 rounded-xl border-2 transition-all ${opt.is_correct
-                        ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-500/10'
-                        : 'border-transparent bg-gray-50 dark:bg-slate-900 focus-within:border-indigo-200 dark:focus-within:border-indigo-500/50'
-                      }`}
-                  >
-                    <button
-                      onClick={() => setCorrectOption(qIdx, oIdx)}
-                      className={`p-2 rounded-lg transition-colors ${opt.is_correct ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-300 hover:text-slate-500 dark:text-slate-600 dark:hover:text-slate-400'
+              {/* Options Editor */}
+              {q.question_type === "true_false" ? (
+                <div className="ml-9 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {q.options.slice(0, 2).map((opt, oIdx) => {
+                    const isTrue = opt.text.toLowerCase() === "true";
+                    return (
+                      <button
+                        key={oIdx}
+                        type="button"
+                        onClick={() => setCorrectOption(qIdx, oIdx)}
+                        className={`relative w-full p-6 rounded-2xl border-2 text-left transition-all ${isTrue
+                          ? "bg-blue-500 text-white border-blue-400"
+                          : "bg-rose-500 text-white border-rose-400"
+                        } ${opt.is_correct ? "ring-4 ring-white/40 scale-[1.01]" : "opacity-75 hover:opacity-100"}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xl font-black tracking-tight">{opt.text}</span>
+                          <CheckCircle2 size={24} className={opt.is_correct ? "fill-white/30 text-white" : "text-white/70"} />
+                        </div>
+                        <p className="mt-2 text-sm text-white/85">{opt.is_correct ? "Correct answer" : "Tap to mark as correct"}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="ml-9 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {q.options.map((opt, oIdx) => (
+                    <div
+                      key={oIdx}
+                      className={`relative flex items-center p-2 rounded-xl border-2 transition-all ${opt.is_correct
+                          ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-500/10'
+                          : 'border-transparent bg-gray-50 dark:bg-slate-900 focus-within:border-indigo-200 dark:focus-within:border-indigo-500/50'
                         }`}
                     >
-                      <CheckCircle2 size={24} className={opt.is_correct ? 'fill-emerald-100 dark:fill-emerald-900/30' : ''} />
-                    </button>
-                    <input
-                      type="text" value={opt.text} onChange={e => updateOption(qIdx, oIdx, e.target.value)}
-                      placeholder={`Add answer ${oIdx + 1}`}
-                      className="flex-1 px-2 py-2 bg-transparent outline-none text-slate-900 dark:text-white font-medium"
-                    />
-                  </div>
-                ))}
-              </div>
+                      <button
+                        onClick={() => setCorrectOption(qIdx, oIdx)}
+                        className={`p-2 rounded-lg transition-colors ${opt.is_correct ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-300 hover:text-slate-500 dark:text-slate-600 dark:hover:text-slate-400'
+                          }`}
+                      >
+                        <CheckCircle2 size={24} className={opt.is_correct ? 'fill-emerald-100 dark:fill-emerald-900/30' : ''} />
+                      </button>
+                      <input
+                        type="text" value={opt.text} onChange={e => updateOption(qIdx, oIdx, e.target.value)}
+                        placeholder={`Add answer ${oIdx + 1}`}
+                        className="flex-1 px-2 py-2 bg-transparent outline-none text-slate-900 dark:text-white font-medium"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </motion.div>
           ))}
         </AnimatePresence>

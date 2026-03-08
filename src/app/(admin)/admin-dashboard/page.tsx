@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { motion } from "framer-motion";
-import { Users, Server, BookOpen, Trash2, Ban, RefreshCw, LayoutDashboard, ShieldCheck, Activity, GraduationCap, FileText } from "lucide-react";
+import { Users, Server, BookOpen, Trash2, Ban, RefreshCw, LayoutDashboard, ShieldCheck, Activity, FileText } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -11,6 +11,7 @@ type CompletedSessionRow = {
   id: string;
   status: string;
   finished_at: string | null;
+  started_at?: string | null;
   quizzes?: { title?: string } | null;
   profiles?: { display_name?: string } | null;
 };
@@ -43,12 +44,12 @@ export default function AdminDashboard() {
     const { data: users } = await supabase.from("profiles").select("*").order("created_at", { ascending: false }).limit(20);
     if (users) setUsersList(users);
 
-    // 3. Fetch Global Completed/Finished Sessions for Admin report access
+    // 3. Fetch Global live + completed sessions for Admin report access
     const { data: sessions } = await supabase
       .from("live_sessions")
-      .select("id, status, finished_at, quizzes(title), profiles(display_name)")
-      .in("status", ["completed", "finished"])
-      .order("finished_at", { ascending: false })
+      .select("id, status, started_at, finished_at, quizzes(title), profiles(display_name)")
+      .in("status", ["active", "completed", "finished"])
+      .order("started_at", { ascending: false })
       .limit(50);
 
     if (sessions) setCompletedSessionsList(sessions as CompletedSessionRow[]);
@@ -60,13 +61,6 @@ export default function AdminDashboard() {
     if (!confirm("Are you sure you want to completely delete this user? This will cascade delete their quizzes and data.")) return;
     await supabase.from("profiles").delete().eq("id", id);
     setUsersList(usersList.filter(u => u.id !== id));
-  };
-
-  const promoteToTeacher = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to promote ${name} to Teacher?`)) return;
-    await supabase.from("profiles").update({ role: "teacher" }).eq("id", id);
-    setUsersList(usersList.map(u => u.id === id ? { ...u, role: "teacher" } : u));
-    fetchAdminData(); // Refresh stats
   };
 
   return (
@@ -165,11 +159,6 @@ export default function AdminDashboard() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
-                        {user.role === 'student' && (
-                          <button onClick={() => promoteToTeacher(user.id, user.display_name)} className="p-2 text-indigo-500 hover:text-white hover:bg-indigo-500 dark:hover:bg-indigo-600 rounded-lg transition-colors" title="Promote to Teacher">
-                            <GraduationCap size={18} />
-                          </button>
-                        )}
                         <button onClick={() => deleteUser(user.id)} disabled={user.role === 'admin'} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent">
                           {user.role === 'admin' ? <Ban size={18} /> : <Trash2 size={18} />}
                         </button>
@@ -185,7 +174,7 @@ export default function AdminDashboard() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-slate-800/50 overflow-hidden flex flex-col h-[500px]">
             <div className="p-6 border-b border-gray-100 dark:border-white/5">
               <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2"><Activity size={20} className="text-emerald-500"/> Session Management</h2>
-              <p className="text-xs mt-1 text-slate-400">Global completed sessions across the platform</p>
+              <p className="text-xs mt-1 text-slate-400">Global live and completed sessions across the platform</p>
             </div>
             <div className="flex-1 overflow-auto">
               <table className="w-full text-left border-collapse">
@@ -193,6 +182,7 @@ export default function AdminDashboard() {
                   <tr>
                     <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Quiz Title</th>
                     <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Host Name</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</th>
                     <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Completed At</th>
                     <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Action</th>
                   </tr>
@@ -207,7 +197,8 @@ export default function AdminDashboard() {
                       <td className="px-6 py-4">
                         <div className="text-slate-200 font-medium">{sess.profiles?.display_name || "Unknown Host"}</div>
                       </td>
-                      <td className="px-6 py-4 text-slate-300 text-sm">{sess.finished_at ? new Date(sess.finished_at).toLocaleString() : "N/A"}</td>
+                      <td className="px-6 py-4 text-slate-300 text-sm uppercase">{sess.status}</td>
+                      <td className="px-6 py-4 text-slate-300 text-sm">{sess.finished_at ? new Date(sess.finished_at).toLocaleString() : sess.started_at ? new Date(sess.started_at).toLocaleString() : "N/A"}</td>
                       <td className="px-6 py-4 text-right">
                         <Link
                           href={`/dashboard/reports/${sess.id}`}
@@ -220,8 +211,8 @@ export default function AdminDashboard() {
                   ))}
                   {completedSessionsList.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="px-6 py-10 text-center text-slate-400 text-sm">
-                        No completed sessions found.
+                      <td colSpan={5} className="px-6 py-10 text-center text-slate-400 text-sm">
+                        No live/completed sessions found.
                       </td>
                     </tr>
                   )}

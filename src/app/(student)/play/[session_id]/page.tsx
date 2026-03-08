@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { useLiveSession } from "@/hooks/useLiveSession";
@@ -29,6 +29,8 @@ export default function StudentPlayRoom() {
   const [participantId, setParticipantId] = useState<string | null>(null);
   const [participantName, setParticipantName] = useState("Student");
   const [streak, setStreak] = useState(0);
+  const [reactionCooldown, setReactionCooldown] = useState(false);
+  const reactionChannelRef = useRef<any>(null);
 
   useLiveSession(sessionId, "student");
 
@@ -59,6 +61,17 @@ export default function StudentPlayRoom() {
       void supabase.removeChannel(gameRoomChannel);
     };
   }, [sessionId, participantId, participantName]);
+
+  // Realtime channel for emoji reactions from waiting room
+  useEffect(() => {
+    if (!sessionId) return;
+    const reactionChannel = supabase.channel(`emoji-room:${sessionId}`).subscribe();
+    reactionChannelRef.current = reactionChannel;
+    return () => {
+      reactionChannelRef.current = null;
+      void supabase.removeChannel(reactionChannel);
+    };
+  }, [sessionId]);
 
   // Listen for answer-reveal broadcasts from host
   useEffect(() => {
@@ -179,6 +192,17 @@ export default function StudentPlayRoom() {
     router.push("/dashboard");
   };
 
+  const sendEmojiReaction = async (emoji: string) => {
+    if (reactionCooldown || !reactionChannelRef.current) return;
+    setReactionCooldown(true);
+    await reactionChannelRef.current.send({
+      type: "broadcast",
+      event: "emoji_reaction",
+      payload: { emoji, studentName: participantName },
+    });
+    setTimeout(() => setReactionCooldown(false), 500);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -205,6 +229,12 @@ export default function StudentPlayRoom() {
         {/* WAITING: lobby */}
         {sessionStatus === "waiting" && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
+            <div className="inline-flex items-center justify-center gap-2 bg-slate-800/60 backdrop-blur-md border border-slate-700/50 px-6 py-3 rounded-full shadow-xl mb-8">
+              <span className="text-sm font-semibold uppercase tracking-widest text-slate-300">GAME PIN:</span>
+              <span className="font-mono text-2xl font-black tracking-[0.2em] text-indigo-400">
+                {sessionInfo?.join_code || "------"}
+              </span>
+            </div>
             <div className="text-6xl mb-6">🎮</div>
             <h2 className="text-4xl font-extrabold text-slate-900 dark:text-white mb-3 tracking-tight">
               You're In, {participantName}!
@@ -220,6 +250,21 @@ export default function StudentPlayRoom() {
                 />
               ))}
             </div>
+
+            <div className="fixed bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-slate-800/60 backdrop-blur-md border border-slate-700/50 px-6 py-3 rounded-full shadow-2xl z-40">
+              {["🔥", "👏", "😂", "🚀"].map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  onClick={() => void sendEmojiReaction(emoji)}
+                  disabled={reactionCooldown}
+                  className="text-2xl hover:scale-125 transition-transform cursor-pointer active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+                  aria-label={`Send ${emoji} reaction`}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
           </motion.div>
         )}
 
@@ -228,6 +273,7 @@ export default function StudentPlayRoom() {
           <ActiveQuestionCard
             key={questions[currentQuestionIndex].id}
             question={questions[currentQuestionIndex].question_text}
+            questionType={questions[currentQuestionIndex].question_type || "mcq"}
             options={questions[currentQuestionIndex].options}
             timeLimit={questions[currentQuestionIndex].time_limit}
             streak={streak}

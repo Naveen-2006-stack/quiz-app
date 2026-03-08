@@ -108,12 +108,24 @@ export default function SessionAnalyticsReportPage() {
         return;
       }
 
-      const { data: sData, error: sErr } = await supabase
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      const isAdmin = profile?.role === "admin";
+
+      let sessionQuery = supabase
         .from("live_sessions")
         .select("id, quiz_id, started_at, finished_at, quizzes(title)")
-        .eq("id", sessionId)
-        .eq("teacher_id", user.id)
-        .single();
+        .eq("id", sessionId);
+
+      if (!isAdmin) {
+        sessionQuery = sessionQuery.eq("teacher_id", user.id);
+      }
+
+      const { data: sData, error: sErr } = await sessionQuery.single();
 
       if (sErr || !sData) {
         setError("Could not load this report. It may not exist or you may not have access.");

@@ -23,6 +23,13 @@ interface FlaggedStudent {
   flaggedAt: string;
 }
 
+interface FloatingEmoji {
+  id: string;
+  emoji: string;
+  studentName?: string;
+  xOffset: number;
+}
+
 export default function HostRoom() {
   const router = useRouter();
   const params = useParams();
@@ -35,6 +42,7 @@ export default function HostRoom() {
   const [startError, setStartError] = useState<string | null>(null);
   const [advancingQuestion, setAdvancingQuestion] = useState(false);
   const [flaggedStudents, setFlaggedStudents] = useState<FlaggedStudent[]>([]);
+  const [floatingEmojis, setFloatingEmojis] = useState<FloatingEmoji[]>([]);
 
   // Live submission counter state
   const [submissionCount, setSubmissionCount] = useState(0);
@@ -80,6 +88,19 @@ export default function HostRoom() {
           ...prev,
           { studentId, studentName: studentName || "Unknown", flaggedAt: new Date().toISOString() },
         ]);
+      })
+      .on("broadcast", { event: "emoji_reaction" }, (payload) => {
+        const emoji = payload?.payload?.emoji as string | undefined;
+        const studentName = payload?.payload?.studentName as string | undefined;
+        if (!emoji) return;
+
+        const id = `${Date.now()}-${Math.random()}`;
+        const xOffset = Math.floor(Math.random() * 260) - 130;
+        setFloatingEmojis((prev) => [...prev, { id, emoji, studentName, xOffset }]);
+
+        setTimeout(() => {
+          setFloatingEmojis((prev) => prev.filter((item) => item.id !== id));
+        }, 2000);
       })
       .subscribe();
     return () => { void supabase.removeChannel(gameRoomChannel); };
@@ -213,6 +234,25 @@ export default function HostRoom() {
 
     return (
       <div className="max-w-7xl mx-auto py-8 px-4">
+        <div className="pointer-events-none fixed inset-0 z-[60] overflow-hidden">
+          <AnimatePresence>
+            {floatingEmojis.map((item) => (
+              <motion.div
+                key={item.id}
+                initial={{ y: 50, opacity: 0, scale: 0.8 }}
+                animate={{ y: -200, opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.6 }}
+                transition={{ duration: 1.8, ease: "easeOut" }}
+                className="absolute bottom-10 left-1/2 text-4xl drop-shadow-2xl"
+                style={{ transform: `translateX(${item.xOffset}px)` }}
+                title={item.studentName || "Student"}
+              >
+                {item.emoji}
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+
         {/* Security Flags */}
         {flaggedStudents.length > 0 && (
           <div className="mb-6 rounded-2xl border border-rose-300 bg-rose-50 p-4 dark:border-rose-500/40 dark:bg-rose-500/10">
@@ -347,6 +387,25 @@ export default function HostRoom() {
   // ───────── WAITING LOBBY screen ─────────
   return (
     <div className="max-w-5xl mx-auto py-12 px-4">
+      <div className="pointer-events-none fixed inset-0 z-[60] overflow-hidden">
+        <AnimatePresence>
+          {floatingEmojis.map((item) => (
+            <motion.div
+              key={item.id}
+              initial={{ y: 50, opacity: 0, scale: 0.8 }}
+              animate={{ y: -200, opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.6 }}
+              transition={{ duration: 1.8, ease: "easeOut" }}
+              className="absolute bottom-10 left-1/2 text-4xl drop-shadow-2xl"
+              style={{ transform: `translateX(${item.xOffset}px)` }}
+              title={item.studentName || "Student"}
+            >
+              {item.emoji}
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
       {/* Back link */}
       <button onClick={() => router.push("/dashboard")} className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors mb-8 group">
         <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" /> Back to Dashboard
