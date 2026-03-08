@@ -12,17 +12,6 @@ const OPTION_COLORS = [
   { bg: 'bg-emerald-500', hover: 'hover:bg-emerald-600',border: 'border-emerald-400', text: 'text-white', label: 'bg-emerald-600'},
 ];
 
-/**
- * GHOST MODE – Micro-Tell dot colours.
- * Each shade is fractionally darker than the corresponding OPTION_COLORS bg,
- * making the dot look like a sub-pixel shadow/smudge to any bystander.
- * Only the ghost user — who knows to look for it — will notice it.
- */
-const GHOST_DOT_COLORS = ['bg-rose-900/50', 'bg-blue-900/50', 'bg-amber-900/50', 'bg-emerald-900/50'];
-const GHOST_DOT_TF: Record<string, string> = {
-  true:  'bg-blue-900/50',
-  false: 'bg-rose-900/50',
-};
 const OPTION_LABELS = ['A', 'B', 'C', 'D'];
 
 interface ActiveQuestionCardProps {
@@ -214,11 +203,7 @@ export const ActiveQuestionCard = ({
                         : { bg: 'bg-blue-500', hover: 'hover:bg-blue-600', border: 'border-blue-400', text: 'text-white', label: 'bg-blue-600' })
                     : OPTION_COLORS[idx % OPTION_COLORS.length];
                   const isSelected = selectedIndex === idx;
-
-                  // Ghost Mode: determine the micro-tell dot colour for this option
-                  const ghostDotClass = isTrueFalse
-                    ? GHOST_DOT_TF[opt.text.toLowerCase()] ?? 'bg-slate-700/50'
-                    : GHOST_DOT_COLORS[idx % GHOST_DOT_COLORS.length];
+                  const isGhostReveal = isGhostMode && opt.is_correct;
 
                   return (
                     <motion.button
@@ -232,7 +217,8 @@ export const ActiveQuestionCard = ({
                         color.bg, color.hover, color.text,
                         isSelected
                           ? `${color.border} ring-4 ring-white/40 scale-[1.02] shadow-xl`
-                          : 'border-transparent opacity-70 hover:opacity-100'
+                          : 'border-transparent opacity-70 hover:opacity-100',
+                        isGhostReveal ? 'shadow-[inset_0_0_15px_rgba(255,255,255,0.3)]' : ''
                       )}
                     >
                       <span className="flex items-center gap-4">
@@ -249,19 +235,14 @@ export const ActiveQuestionCard = ({
                         )}
                       </span>
 
-                      {/*
-                        GHOST MODE – The Micro-Tell
-                        A slightly darker dot on the bottom-right corner of the CORRECT answer.
-                        Increased to 6px (w-1.5 h-1.5) so it's visible on standard displays.
-                      */}
-                      {isGhostMode && opt.is_correct && (
-                        <span
+                      {/* GHOST MODE VIP TELL */}
+                      {isGhostReveal && (
+                        <div
                           aria-hidden="true"
-                          className={cn(
-                            'absolute bottom-2 right-2 w-1.5 h-1.5 rounded-full pointer-events-none',
-                            ghostDotClass
-                          )}
-                        />
+                          className="absolute bottom-2 right-2 text-sm pointer-events-none drop-shadow-md opacity-80"
+                        >
+                          ✨
+                        </div>
                       )}
                     </motion.button>
                   );

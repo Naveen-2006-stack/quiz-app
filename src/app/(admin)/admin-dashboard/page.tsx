@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { motion } from "framer-motion";
-import { Users, Server, BookOpen, Trash2, Ban, RefreshCw, LayoutDashboard, ShieldCheck, Activity, FileText, ArrowUpCircle } from "lucide-react";
+import { Users, Server, BookOpen, Trash2, Ban, RefreshCw, LayoutDashboard, ShieldCheck, Activity, FileText, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +23,7 @@ export default function AdminDashboard() {
   const [completedSessionsList, setCompletedSessionsList] = useState<CompletedSessionRow[]>([]);
   const [loading, setLoading] = useState(true);
   // Ghost Mode: tracks which user ID is currently in the 1-second confirmation flash
-  const [ghostFlashId, setGhostFlashId] = useState<string | null>(null);
+
 
   useEffect(() => {
     fetchAdminData();
@@ -100,20 +100,6 @@ export default function AdminDashboard() {
     setUsersList(prev => prev.filter(u => u.id !== id));
   };
 
-  /** Cycles role: student → teacher → student. Admins are locked. */
-  const promoteUser = async (user: any) => {
-    if (user.role === 'admin') return; // never touch admins
-    const nextRole = user.role === 'student' ? 'teacher' : 'student';
-    const { error } = await supabase
-      .from('profiles')
-      .update({ role: nextRole })
-      .eq('id', user.id);
-    if (error) return;
-    setUsersList(prev =>
-      prev.map(u => u.id === user.id ? { ...u, role: nextRole } : u)
-    );
-  };
-
   /** Deletes a live_session record (cascades to participants + responses via FK). */
   const deleteSession = async (id: string) => {
     if (!confirm("Delete this session? This will permanently remove it and all associated response data.")) return;
@@ -122,8 +108,7 @@ export default function AdminDashboard() {
   };
 
   /**
-   * COVERT: Double-click the user's ID text to silently toggle ghost_mode.
-   * No badge, no icon. Only a 1-second subtle color shift on the ID text confirms.
+   * VIP Ghost Mode: explicitly toggle the visibility of correct answers.
    */
   const toggleGhostMode = async (user: any) => {
     const newValue = !user.ghost_mode;
@@ -131,14 +116,14 @@ export default function AdminDashboard() {
       .from("profiles")
       .update({ ghost_mode: newValue })
       .eq("id", user.id);
-    if (error) return; // silently fail — no console noise either
+    if (error) {
+      alert("Failed to update ghost mode.");
+      return;
+    }
     // Update local state
     setUsersList((prev) =>
       prev.map((u) => (u.id === user.id ? { ...u, ghost_mode: newValue } : u))
     );
-    // 1-second color flash as the only confirmation
-    setGhostFlashId(user.id);
-    setTimeout(() => setGhostFlashId(null), 1000);
   };
 
   return (
@@ -225,44 +210,34 @@ export default function AdminDashboard() {
                     <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/80 transition-colors group">
                       <td className="px-6 py-4">
                         <div className="font-semibold text-slate-900 dark:text-white">{user.display_name}</div>
-                        {/* COVERT: double-click me to toggle ghost_mode — looks like a plain ID */}
-                        <div
-                          className="text-xs font-mono mt-1 w-32 truncate select-none cursor-default transition-colors duration-200"
-                          style={{
-                            color: ghostFlashId === user.id
-                              ? (user.ghost_mode ? '#6ee7b7' : '#94a3b8')
-                              : '#64748b',
-                          }}
-                          title={user.id}
-                          onDoubleClick={() => void toggleGhostMode(user)}
-                        >
+                        <div className="text-xs font-mono mt-1 w-32 truncate select-none text-slate-500" title={user.id}>
                           {user.id}
                         </div>
                       </td>
                       <td className="px-6 py-4">
                         <span className={cn("px-3 py-1 text-xs font-bold rounded-full border", 
-                          user.role === 'admin' ? "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20" : 
-                          user.role === 'teacher' ? "bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-400 dark:border-indigo-500/20" : 
-                          "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700"
+                          user.role === 'admin' 
+                            ? "bg-amber-500/20 text-amber-400 border-amber-500/50" 
+                            : "bg-slate-700/50 text-slate-300 border-slate-600"
                         )}>
                           {user.role}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {/* Promote / demote button */}
+                          {/* Ghost mode / VIP button */}
                           <button
-                            onClick={() => void promoteUser(user)}
+                            onClick={() => void toggleGhostMode(user)}
                             disabled={user.role === 'admin'}
-                            title={user.role === 'admin' ? 'Admin — locked' : user.role === 'student' ? 'Promote to Teacher' : 'Demote to Student'}
+                            title={user.role === 'admin' ? 'Admin automatically has VIP' : user.ghost_mode ? 'Revoke VIP / Ghost' : 'Grant VIP / Ghost'}
                             className={cn(
-                              "p-2 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed",
-                              user.role === 'student'
-                                ? "text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-500/10"
-                                : "text-amber-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-500/10"
+                              "p-2 rounded-lg transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed",
+                              user.ghost_mode
+                                ? "text-emerald-400 hover:text-rose-400 hover:bg-rose-500/10 shadow-[0_0_10px_rgba(52,211,153,0.3)] bg-emerald-500/10 border border-emerald-500/20"
+                                : "text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 border border-transparent"
                             )}
                           >
-                            <ArrowUpCircle size={18} className={user.role === 'teacher' ? 'rotate-180' : ''} />
+                            {user.ghost_mode ? <Eye size={18} /> : <EyeOff size={18} />}
                           </button>
                           {/* Delete button */}
                           <button
