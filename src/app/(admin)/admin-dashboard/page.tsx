@@ -10,10 +10,11 @@ import { cn } from "@/lib/utils";
 type CompletedSessionRow = {
   id: string;
   status: string;
+  teacher_id?: string | null;
   finished_at: string | null;
   started_at?: string | null;
   quizzes?: { title?: string } | null;
-  profiles?: { display_name?: string } | null;
+  host_name?: string;
 };
 
 export default function AdminDashboard() {
@@ -44,15 +45,45 @@ export default function AdminDashboard() {
     const { data: users } = await supabase.from("profiles").select("*").order("created_at", { ascending: false }).limit(20);
     if (users) setUsersList(users);
 
-    // 3. Fetch Global live + completed sessions for Admin report access
+    // 3. Fetch recent sessions globally, then keep conducted/live sessions.
+    // This is more resilient across environments where status values may vary.
     const { data: sessions } = await supabase
       .from("live_sessions")
-      .select("id, status, started_at, finished_at, quizzes(title), profiles(display_name)")
-      .in("status", ["active", "completed", "finished"])
+      .select("id, status, teacher_id, started_at, finished_at, quizzes(title)")
       .order("started_at", { ascending: false })
-      .limit(50);
+      .limit(200);
 
-    if (sessions) setCompletedSessionsList(sessions as CompletedSessionRow[]);
+    if (sessions) {
+      const sessionRows = sessions as CompletedSessionRow[];
+      const conducted = sessionRows.filter((s) =>
+        s.status === "active" ||
+        s.status === "finished" ||
+        s.status === "completed" ||
+        !!s.started_at ||
+        !!s.finished_at
+      );
+
+      const hostIds = Array.from(new Set(conducted.map((s) => s.teacher_id).filter(Boolean))) as string[];
+      const hostMap = new Map<string, string>();
+
+      if (hostIds.length > 0) {
+        const { data: hosts } = await supabase
+          .from("profiles")
+          .select("id, display_name")
+          .in("id", hostIds);
+
+        (hosts || []).forEach((h: any) => {
+          hostMap.set(h.id, h.display_name || "Unknown Host");
+        });
+      }
+
+      const mapped = conducted.map((s) => ({
+        ...s,
+        host_name: (s.teacher_id && hostMap.get(s.teacher_id)) || "Unknown Host",
+      }));
+
+      setCompletedSessionsList(mapped);
+    }
     
     setLoading(false);
   };
@@ -195,7 +226,7 @@ export default function AdminDashboard() {
                         <div className="text-[11px] text-slate-500 font-mono mt-1">{sess.id.slice(0, 8)}...</div>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="text-slate-200 font-medium">{sess.profiles?.display_name || "Unknown Host"}</div>
+                        <div className="text-slate-200 font-medium">{sess.host_name || "Unknown Host"}</div>
                       </td>
                       <td className="px-6 py-4 text-slate-300 text-sm uppercase">{sess.status}</td>
                       <td className="px-6 py-4 text-slate-300 text-sm">{sess.finished_at ? new Date(sess.finished_at).toLocaleString() : sess.started_at ? new Date(sess.started_at).toLocaleString() : "N/A"}</td>
