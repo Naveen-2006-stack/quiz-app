@@ -3,14 +3,22 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { motion } from "framer-motion";
-import { Users, Server, BookOpen, Trash2, Ban, RefreshCw, LayoutDashboard, ShieldCheck, Activity, GraduationCap } from "lucide-react";
+import { Users, Server, BookOpen, Trash2, Ban, RefreshCw, LayoutDashboard, ShieldCheck, Activity, GraduationCap, FileText } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+
+type CompletedSessionRow = {
+  id: string;
+  status: string;
+  finished_at: string | null;
+  quizzes?: { title?: string } | null;
+  profiles?: { display_name?: string } | null;
+};
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({ totalUsers: 0, activeSessions: 0, totalQuizzes: 0 });
   const [usersList, setUsersList] = useState<any[]>([]);
-  const [sessionsList, setSessionsList] = useState<any[]>([]);
+  const [completedSessionsList, setCompletedSessionsList] = useState<CompletedSessionRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -35,9 +43,15 @@ export default function AdminDashboard() {
     const { data: users } = await supabase.from("profiles").select("*").order("created_at", { ascending: false }).limit(20);
     if (users) setUsersList(users);
 
-    // 3. Fetch Sessions (for Data Table)
-    const { data: sessions } = await supabase.from("live_sessions").select("*, quizzes(title), profiles(display_name)").order("created_at", { ascending: false }).limit(20);
-    if (sessions) setSessionsList(sessions);
+    // 3. Fetch Global Completed/Finished Sessions for Admin report access
+    const { data: sessions } = await supabase
+      .from("live_sessions")
+      .select("id, status, finished_at, quizzes(title), profiles(display_name)")
+      .in("status", ["completed", "finished"])
+      .order("finished_at", { ascending: false })
+      .limit(50);
+
+    if (sessions) setCompletedSessionsList(sessions as CompletedSessionRow[]);
     
     setLoading(false);
   };
@@ -53,13 +67,6 @@ export default function AdminDashboard() {
     await supabase.from("profiles").update({ role: "teacher" }).eq("id", id);
     setUsersList(usersList.map(u => u.id === id ? { ...u, role: "teacher" } : u));
     fetchAdminData(); // Refresh stats
-  };
-
-  const terminateSession = async (id: string) => {
-    if (!confirm("Are you sure you want to terminate this active session?")) return;
-    await supabase.from("live_sessions").update({ status: "finished" }).eq("id", id);
-    setSessionsList(sessionsList.map(s => s.id === id ? { ...s, status: "finished" } : s));
-    fetchAdminData(); // refresh active counts
   };
 
   return (
@@ -174,43 +181,50 @@ export default function AdminDashboard() {
             </div>
           </motion.div>
 
-          {/* Active Sessions Table */}
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="bg-white/70 dark:bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-white/20 dark:border-slate-800/50 overflow-hidden flex flex-col h-[500px]">
+          {/* Global Completed Sessions Table */}
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-slate-800/50 overflow-hidden flex flex-col h-[500px]">
             <div className="p-6 border-b border-gray-100 dark:border-white/5">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2"><Activity size={20} className="text-emerald-500"/> Session Management</h2>
+              <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2"><Activity size={20} className="text-emerald-500"/> Session Management</h2>
+              <p className="text-xs mt-1 text-slate-400">Global completed sessions across the platform</p>
             </div>
             <div className="flex-1 overflow-auto">
               <table className="w-full text-left border-collapse">
-                <thead className="sticky top-0 bg-gray-50/95 dark:bg-slate-900/95 backdrop-blur z-10 shadow-sm border-b border-gray-100 dark:border-white/5">
+                <thead className="sticky top-0 bg-slate-900/95 backdrop-blur z-10 shadow-sm border-b border-slate-800/60">
                   <tr>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Session PIN</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Quiz Title</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Host Name</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Completed At</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                  {sessionsList.map((sess) => (
-                    <tr key={sess.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/80 transition-colors group">
+                <tbody className="divide-y divide-slate-800/60">
+                  {completedSessionsList.map((sess) => (
+                    <tr key={sess.id} className="hover:bg-slate-800/70 transition-colors group">
                       <td className="px-6 py-4">
-                        <div className="font-bold text-indigo-600 dark:text-indigo-400 tracking-wider font-mono">{sess.join_code}</div>
-                        <div className="text-xs text-slate-500 font-medium mt-1 truncate max-w-[150px]">{sess.quizzes?.title || 'Unknown Quiz'}</div>
+                        <div className="font-semibold text-slate-100 truncate max-w-[220px]">{sess.quizzes?.title || "Unknown Quiz"}</div>
+                        <div className="text-[11px] text-slate-500 font-mono mt-1">{sess.id.slice(0, 8)}...</div>
                       </td>
                       <td className="px-6 py-4">
-                        <span className={cn("px-3 py-1 text-xs font-bold rounded-full border", 
-                          sess.status === 'active' ? "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20" : 
-                          sess.status === 'waiting' ? "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20" : 
-                          "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700"
-                        )}>
-                          {sess.status.toUpperCase()}
-                        </span>
+                        <div className="text-slate-200 font-medium">{sess.profiles?.display_name || "Unknown Host"}</div>
                       </td>
+                      <td className="px-6 py-4 text-slate-300 text-sm">{sess.finished_at ? new Date(sess.finished_at).toLocaleString() : "N/A"}</td>
                       <td className="px-6 py-4 text-right">
-                        <button onClick={() => terminateSession(sess.id)} disabled={sess.status === 'finished'} className="px-3 py-1.5 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 dark:bg-rose-500/10 dark:text-rose-400 border border-transparent dark:hover:border-rose-500/30 rounded-lg transition-colors disabled:opacity-50 disabled:bg-transparent dark:disabled:bg-transparent">
-                          Terminate
-                        </button>
+                        <Link
+                          href={`/dashboard/reports/${sess.id}`}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 rounded-lg transition-colors"
+                        >
+                          <FileText size={14} /> View Report
+                        </Link>
                       </td>
                     </tr>
                   ))}
+                  {completedSessionsList.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-6 py-10 text-center text-slate-400 text-sm">
+                        No completed sessions found.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

@@ -128,9 +128,6 @@ export default function Navbar() {
                         <span className="text-sm font-bold text-slate-900 dark:text-white leading-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                           {profile?.display_name || authUser.email}
                         </span>
-                        <span className="text-xs font-medium text-slate-500 capitalize leading-tight">
-                          {profile?.role || "student"}
-                        </span>
                       </div>
                     </Link>
 

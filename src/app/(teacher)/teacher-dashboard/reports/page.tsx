@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { motion } from "framer-motion";
 import { BarChart3, Trophy, Users, ShieldAlert, Award } from "lucide-react";
+import Link from "next/link";
 
 export default function ReportsDashboard() {
   const [sessions, setSessions] = useState<any[]>([]);
@@ -72,8 +73,16 @@ export default function ReportsDashboard() {
                       Played on {new Date(sess.finished_at).toLocaleString()}
                     </p>
                   </div>
-                  <div className="font-mono text-sm tracking-widest text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-4 py-2 rounded-xl font-bold inline-block">
-                    PIN: {sess.join_code}
+                  <div className="flex flex-col items-start gap-2 sm:items-end">
+                    <div className="font-mono text-sm tracking-widest text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-4 py-2 rounded-xl font-bold inline-block">
+                      PIN: {sess.join_code}
+                    </div>
+                    <Link
+                      href={`/dashboard/reports/${sess.id}`}
+                      className="inline-flex items-center rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/20"
+                    >
+                      View Full Analytics
+                    </Link>
                   </div>
                 </div>
 
