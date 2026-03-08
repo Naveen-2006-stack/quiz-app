@@ -58,8 +58,6 @@ export default function LoginPage() {
               </span>
             </Link>
           </div>
-          <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white mb-2 tracking-tight">Access LevelNLearn</h2>
-          <p className="text-slate-500 dark:text-slate-400">One account for students, teachers, and admins.</p>
         </div>
 
         {error && (
