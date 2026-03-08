@@ -63,10 +63,10 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 transition-colors p-4 md:p-8">
+    <div className="min-h-screen transition-colors p-4 md:p-8">
       
       {/* Admin Navbar */}
-      <div className="max-w-7xl mx-auto flex items-center justify-between mb-8 bg-white dark:bg-slate-800 p-4 px-6 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5">
+      <div className="max-w-7xl mx-auto flex items-center justify-between mb-8 bg-white/70 dark:bg-slate-900/50 backdrop-blur-xl p-4 px-6 rounded-2xl border border-white/20 dark:border-slate-800/50 shadow-[0_10px_30px_rgba(15,23,42,0.08)] dark:shadow-[0_10px_40px_rgba(2,6,23,0.45)]">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-600/20">
             <ShieldCheck className="text-white" size={24} />
@@ -90,7 +90,7 @@ export default function AdminDashboard() {
         
         {/* Top-Level Metrics Row */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="p-6 bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-gray-100 dark:border-white/5 relative overflow-hidden group">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="p-6 bg-white/70 dark:bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-white/20 dark:border-slate-800/50 relative overflow-hidden group transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_0_20px_rgba(99,102,241,0.15)] dark:hover:shadow-[0_0_20px_rgba(99,102,241,0.2)]">
             <div className="absolute top-0 right-0 -mr-4 -mt-4 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition-all duration-500" />
             <div className="flex items-center justify-between mb-4 relative z-10">
               <span className="text-slate-500 dark:text-slate-400 font-semibold tracking-wide text-sm">TOTAL USERS</span>
@@ -101,7 +101,7 @@ export default function AdminDashboard() {
             </div>
           </motion.div>
 
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="p-6 bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-gray-100 dark:border-white/5 relative overflow-hidden group">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="p-6 bg-white/70 dark:bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-white/20 dark:border-slate-800/50 relative overflow-hidden group transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_0_20px_rgba(99,102,241,0.15)] dark:hover:shadow-[0_0_20px_rgba(99,102,241,0.2)]">
             <div className="absolute top-0 right-0 -mr-4 -mt-4 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-all duration-500" />
             <div className="flex items-center justify-between mb-4 relative z-10">
               <span className="text-slate-500 dark:text-slate-400 font-semibold tracking-wide text-sm">ACTIVE SESSIONS</span>
@@ -112,7 +112,7 @@ export default function AdminDashboard() {
             </div>
           </motion.div>
 
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="p-6 bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-gray-100 dark:border-white/5 relative overflow-hidden group">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="p-6 bg-white/70 dark:bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-white/20 dark:border-slate-800/50 relative overflow-hidden group transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_0_20px_rgba(99,102,241,0.15)] dark:hover:shadow-[0_0_20px_rgba(99,102,241,0.2)]">
             <div className="absolute top-0 right-0 -mr-4 -mt-4 w-32 h-32 bg-purple-500/10 rounded-full blur-2xl group-hover:bg-purple-500/20 transition-all duration-500" />
             <div className="flex items-center justify-between mb-4 relative z-10">
               <span className="text-slate-500 dark:text-slate-400 font-semibold tracking-wide text-sm">TOTAL QUIZZES</span>
@@ -128,7 +128,7 @@ export default function AdminDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           
           {/* Recent Users Table */}
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-gray-100 dark:border-white/5 overflow-hidden flex flex-col h-[500px]">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="bg-white/70 dark:bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-white/20 dark:border-slate-800/50 overflow-hidden flex flex-col h-[500px]">
             <div className="p-6 border-b border-gray-100 dark:border-white/5">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2"><Server size={20} className="text-indigo-500"/> User Management</h2>
             </div>
@@ -175,7 +175,7 @@ export default function AdminDashboard() {
           </motion.div>
 
           {/* Active Sessions Table */}
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-gray-100 dark:border-white/5 overflow-hidden flex flex-col h-[500px]">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="bg-white/70 dark:bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-white/20 dark:border-slate-800/50 overflow-hidden flex flex-col h-[500px]">
             <div className="p-6 border-b border-gray-100 dark:border-white/5">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2"><Activity size={20} className="text-emerald-500"/> Session Management</h2>
             </div>

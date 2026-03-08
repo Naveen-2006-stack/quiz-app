@@ -18,6 +18,12 @@ interface LiveSession {
   quizzes?: { title: string, questions: { id: string }[] };
 }
 
+interface FlaggedStudent {
+  studentId: string;
+  studentName: string;
+  flaggedAt: string;
+}
+
 export default function TeacherHostRoom() {
   const router = useRouter();
   const params = useParams();
@@ -30,6 +36,7 @@ export default function TeacherHostRoom() {
   const [startError, setStartError] = useState<string | null>(null);
   const [advancingQuestion, setAdvancingQuestion] = useState(false);
   const [controlChannel, setControlChannel] = useState<any>(null);
+  const [flaggedStudents, setFlaggedStudents] = useState<FlaggedStudent[]>([]);
   
   // Connect to realtime store mapping
   const participantsMap = useGameStore(s => s.participants);
@@ -53,6 +60,33 @@ export default function TeacherHostRoom() {
     return () => {
       supabase.removeChannel(channel);
       setControlChannel(null);
+    };
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const gameRoomChannel = supabase
+      .channel(`game-room:${sessionId}`)
+      .on("broadcast", { event: "anti_cheat_violation" }, (payload) => {
+        const studentId = payload?.payload?.studentId as string | undefined;
+        const studentName = payload?.payload?.studentName as string | undefined;
+
+        if (!studentId) return;
+
+        setFlaggedStudents((prev) => [
+          ...prev,
+          {
+            studentId,
+            studentName: studentName || "Unknown Student",
+            flaggedAt: new Date().toISOString(),
+          },
+        ]);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(gameRoomChannel);
     };
   }, [sessionId]);
 
@@ -158,12 +192,31 @@ export default function TeacherHostRoom() {
     setAdvancingQuestion(false);
   };
 
+  const renderSecurityFlagsPanel = () => {
+    if (flaggedStudents.length === 0) return null;
+
+    return (
+      <div className="mb-8 rounded-2xl border border-rose-300 bg-rose-50 p-4 dark:border-rose-500/40 dark:bg-rose-500/10">
+        <h3 className="text-sm font-extrabold uppercase tracking-wide text-rose-700 dark:text-rose-300 mb-3">Security Flags</h3>
+        <div className="space-y-2">
+          {flaggedStudents.map((flag) => (
+            <div key={`${flag.studentId}-${flag.flaggedAt}`} className="rounded-lg border border-rose-200/80 bg-white px-3 py-2 text-sm font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-slate-900/40 dark:text-rose-300">
+              {`⚠️ ${flag.studentName} switched tabs!`}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   if (sessionStatus === "active" || sessionStatus === "finished") {
     const sortedParticipants = [...participantsList].sort((a, b) => b.score - a.score);
     const activeQ = questions[currentQuestionIndex];
 
     return (
       <div className="max-w-7xl mx-auto py-8 px-4">
+        {renderSecurityFlagsPanel()}
+
         {sessionStatus === "active" && activeQ && (
           <div className="mb-12 bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] shadow-xl shadow-indigo-100/50 dark:shadow-none border border-indigo-50 dark:border-white/5">
             <div className="flex justify-between items-center mb-6">
@@ -219,6 +272,8 @@ export default function TeacherHostRoom() {
 
   return (
     <div className="max-w-5xl mx-auto py-12">
+      {renderSecurityFlagsPanel()}
+
       <div className="text-center mb-12">
         <h1 className="text-5xl font-black text-slate-900 dark:text-white mb-4 tracking-tight">
           Join at <span className="text-indigo-600 dark:text-indigo-400">yourdomain.com</span>

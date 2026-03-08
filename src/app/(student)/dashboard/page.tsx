@@ -94,7 +94,7 @@ export default function StudentDashboard() {
   };
 
   return (
-    <div className="space-y-8 min-h-screen bg-gray-50 dark:bg-slate-900 transition-colors pt-8 pb-32 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="space-y-8 min-h-screen transition-colors pt-8 pb-32 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       {/* Header Section */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -116,7 +116,7 @@ export default function StudentDashboard() {
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[1, 2, 3].map(i => (
-            <div key={i} className="h-48 rounded-3xl bg-white dark:bg-slate-800 shadow-sm border border-gray-100 dark:border-white/5 animate-pulse" />
+            <div key={i} className="h-48 rounded-3xl bg-white/70 dark:bg-slate-900/50 backdrop-blur-xl border border-white/20 dark:border-slate-800/50 animate-pulse" />
           ))}
         </div>
       ) : errorProfile ? (
@@ -127,7 +127,7 @@ export default function StudentDashboard() {
           </p>
         </div>
       ) : history.length === 0 ? (
-        <div className="text-center py-20 bg-white dark:bg-slate-800 rounded-3xl border border-dashed border-gray-200 dark:border-white/10">
+        <div className="text-center py-20 bg-white/70 dark:bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-dashed border-white/20 dark:border-slate-800/50">
           <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
             <Award className="text-emerald-600 dark:text-emerald-400" size={32} />
           </div>
@@ -143,7 +143,7 @@ export default function StudentDashboard() {
             {history.map((record, idx) => (
               <motion.div key={record.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: idx * 0.05 }}
-                className="group relative bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-xl shadow-slate-200/40 dark:shadow-none border border-gray-100 dark:border-white/10"
+                className="group relative bg-white/70 dark:bg-slate-900/50 backdrop-blur-xl rounded-3xl p-6 border border-white/20 dark:border-slate-800/50 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_0_20px_rgba(99,102,241,0.15)] dark:hover:shadow-[0_0_20px_rgba(99,102,241,0.2)]"
               >
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex-1">

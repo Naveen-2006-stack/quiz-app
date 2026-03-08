@@ -26,18 +26,42 @@ export default function StudentPlayRoom() {
   
   // Local Participant State
   const [participantId, setParticipantId] = useState<string | null>(null);
+  const [participantName, setParticipantName] = useState<string>("Student");
   const [streak, setStreak] = useState(0);
 
   useLiveSession(sessionId, 'student');
 
   useEffect(() => {
     initPlayRoom();
-    setupAntiCheat();
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const gameRoomChannel = supabase.channel(`game-room:${sessionId}`).subscribe();
+
+    const onVisibilityChange = async () => {
+      if (!document.hidden || !participantId) return;
+
+      await gameRoomChannel.send({
+        type: "broadcast",
+        event: "anti_cheat_violation",
+        payload: {
+          studentName: participantName,
+          studentId: participantId,
+        },
+      });
+
+      await supabase.rpc("increment_cheat_flags", { p_id: participantId });
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      supabase.removeChannel(gameRoomChannel);
     };
-  }, [sessionId]);
+  }, [sessionId, participantId, participantName]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -94,39 +118,20 @@ export default function StudentPlayRoom() {
     // 3. Authenticate local UUID as participant
     const { data: pData } = await supabase
       .from("participants")
-      .select("id, streak")
+      .select("id, streak, display_name")
       .eq("session_id", sessionId)
       .eq("device_uuid", uuid)
       .single();
 
     if (pData) {
       setParticipantId(pData.id);
+      setParticipantName(pData.display_name || "Student");
       setStreak(pData.streak || 0);
     } else {
       router.push("/join"); // Fallback if unregistered
     }
     
     setLoading(false);
-  };
-
-  const handleVisibilityChange = async () => {
-    if (document.hidden && participantId) {
-      // 🚨 ANTI-CHEAT TRIGGERED 🚨
-      // Realtime hook broadcasts this back to the Teacher's podium
-      await supabase.rpc('increment_cheat_flags', { p_id: participantId });
-      
-      // Note: We need a custom PostgreSQL RPC for atomic increment, OR we do an unsafe update:
-      // await supabase.from('participants').update({ cheat_flags: cheat_flags + 1 }).eq('id', participantId)
-      // For simplicity/safety, let's just use raw updating or create the RPC later.
-      const { data } = await supabase.from("participants").select("cheat_flags").eq("id", participantId).single();
-      if (data) {
-        await supabase.from("participants").update({ cheat_flags: data.cheat_flags + 1 }).eq("id", participantId);
-      }
-    }
-  };
-
-  const setupAntiCheat = () => {
-    document.addEventListener("visibilitychange", handleVisibilityChange);
   };
 
   const handleAnswerSubmit = async (optionIdx: number, reactionMs: number) => {

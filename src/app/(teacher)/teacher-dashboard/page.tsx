@@ -199,9 +199,11 @@ export default function TeacherDashboard() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.9 }}
                 transition={{ duration: 0.3, delay: idx * 0.05 }}
-                className="group relative bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-xl shadow-slate-200/40 dark:shadow-none border border-gray-100 dark:border-white/10 hover:border-indigo-200 dark:hover:border-indigo-500/50 transition-all"
+                className="group relative overflow-hidden rounded-3xl p-6 bg-white/70 dark:bg-slate-900/50 backdrop-blur-xl border border-white/20 dark:border-slate-800/50 hover:border-indigo-200 dark:hover:border-indigo-500/50 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_0_20px_rgba(99,102,241,0.15)] dark:hover:shadow-[0_0_20px_rgba(99,102,241,0.2)]"
               >
-                <div className="flex justify-between items-start mb-4">
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/50 via-white/20 to-transparent dark:from-indigo-300/10 dark:via-white/[0.04] dark:to-transparent opacity-70" />
+
+                <div className="relative z-10 flex justify-between items-start mb-4">
                   <div className="flex-1">
                     <h3 className="text-xl font-bold text-slate-900 dark:text-white truncate pb-1" title={quiz.title}>
                       {quiz.title}
@@ -213,7 +215,7 @@ export default function TeacherDashboard() {
                 </div>
 
                 {/* Stats Row */}
-                <div className="flex items-center gap-4 py-4 border-y border-gray-100 dark:border-white/10 mb-6">
+                <div className="relative z-10 flex items-center gap-4 py-4 border-y border-gray-100 dark:border-white/10 mb-6">
                   <div className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300">
                     <Hash size={16} className="text-indigo-500" />
                     <span className="font-semibold">{quiz._count?.questions || 0}</span> questions
@@ -226,7 +228,7 @@ export default function TeacherDashboard() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center justify-between gap-2">
+                <div className="relative z-10 flex items-center justify-between gap-2">
                   <div className="flex-1 grid grid-cols-2 gap-2">
                     <motion.button 
                       onClick={() => startSession(quiz.id)}
