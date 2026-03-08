@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { motion } from "framer-motion";
 import { BarChart3, Trophy, Users, ShieldAlert, Award } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 export default function ReportsDashboard() {
   const [sessions, setSessions] = useState<any[]>([]);
@@ -101,7 +100,7 @@ export default function ReportsDashboard() {
                     {sortedPlayers.slice(0, 5).map((p, i) => (
                       <div key={p.id} className="flex justify-between items-center bg-gray-50 dark:bg-slate-900 p-4 rounded-xl border border-gray-100 dark:border-white/5">
                         <div className="flex items-center gap-4">
-                          <span className={cn("font-black text-xl w-6", i === 0 ? "text-amber-500" : i === 1 ? "text-slate-400" : i === 2 ? "text-amber-700" : "text-slate-300 dark:text-slate-600")}>
+                          <span className={`font-black text-xl w-6 ${i === 0 ? "text-amber-500" : i === 1 ? "text-slate-400" : i === 2 ? "text-amber-700" : "text-slate-300 dark:text-slate-600"}`}>
                             #{i + 1}
                           </span>
                           <span className="font-bold text-slate-800 dark:text-slate-200">{p.display_name}</span>
