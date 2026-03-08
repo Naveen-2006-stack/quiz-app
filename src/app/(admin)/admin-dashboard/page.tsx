@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { motion } from "framer-motion";
-import { Users, Server, BookOpen, Trash2, Ban, RefreshCw, LayoutDashboard, ShieldCheck, Activity, FileText } from "lucide-react";
+import { Users, Server, BookOpen, Trash2, Ban, RefreshCw, LayoutDashboard, ShieldCheck, Activity, FileText, ArrowUpCircle } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -97,7 +97,28 @@ export default function AdminDashboard() {
   const deleteUser = async (id: string) => {
     if (!confirm("Are you sure you want to completely delete this user? This will cascade delete their quizzes and data.")) return;
     await supabase.from("profiles").delete().eq("id", id);
-    setUsersList(usersList.filter(u => u.id !== id));
+    setUsersList(prev => prev.filter(u => u.id !== id));
+  };
+
+  /** Cycles role: student → teacher → student. Admins are locked. */
+  const promoteUser = async (user: any) => {
+    if (user.role === 'admin') return; // never touch admins
+    const nextRole = user.role === 'student' ? 'teacher' : 'student';
+    const { error } = await supabase
+      .from('profiles')
+      .update({ role: nextRole })
+      .eq('id', user.id);
+    if (error) return;
+    setUsersList(prev =>
+      prev.map(u => u.id === user.id ? { ...u, role: nextRole } : u)
+    );
+  };
+
+  /** Deletes a live_session record (cascades to participants + responses via FK). */
+  const deleteSession = async (id: string) => {
+    if (!confirm("Delete this session? This will permanently remove it and all associated response data.")) return;
+    await supabase.from('live_sessions').delete().eq('id', id);
+    setCompletedSessionsList(prev => prev.filter(s => s.id !== id));
   };
 
   /**
@@ -227,10 +248,32 @@ export default function AdminDashboard() {
                           {user.role}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
-                        <button onClick={() => deleteUser(user.id)} disabled={user.role === 'admin'} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent">
-                          {user.role === 'admin' ? <Ban size={18} /> : <Trash2 size={18} />}
-                        </button>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* Promote / demote button */}
+                          <button
+                            onClick={() => void promoteUser(user)}
+                            disabled={user.role === 'admin'}
+                            title={user.role === 'admin' ? 'Admin — locked' : user.role === 'student' ? 'Promote to Teacher' : 'Demote to Student'}
+                            className={cn(
+                              "p-2 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed",
+                              user.role === 'student'
+                                ? "text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-500/10"
+                                : "text-amber-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-500/10"
+                            )}
+                          >
+                            <ArrowUpCircle size={18} className={user.role === 'teacher' ? 'rotate-180' : ''} />
+                          </button>
+                          {/* Delete button */}
+                          <button
+                            onClick={() => void deleteUser(user.id)}
+                            disabled={user.role === 'admin'}
+                            title={user.role === 'admin' ? 'Cannot delete admin' : 'Delete user'}
+                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            {user.role === 'admin' ? <Ban size={18} /> : <Trash2 size={18} />}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -269,12 +312,21 @@ export default function AdminDashboard() {
                       <td className="px-6 py-4 text-slate-300 text-sm uppercase">{sess.status}</td>
                       <td className="px-6 py-4 text-slate-300 text-sm">{sess.finished_at ? new Date(sess.finished_at).toLocaleString() : sess.started_at ? new Date(sess.started_at).toLocaleString() : "N/A"}</td>
                       <td className="px-6 py-4 text-right">
-                        <Link
-                          href={`/dashboard/reports/${sess.id}`}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 rounded-lg transition-colors"
-                        >
-                          <FileText size={14} /> View Report
-                        </Link>
+                        <div className="flex items-center justify-end gap-2">
+                          <Link
+                            href={`/dashboard/reports/${sess.id}`}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 rounded-lg transition-colors"
+                          >
+                            <FileText size={14} /> View Report
+                          </Link>
+                          <button
+                            onClick={() => void deleteSession(sess.id)}
+                            title="Delete session"
+                            className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
