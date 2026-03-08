@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { generateRoomCode } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Play, Edit3, Trash2, Clock, Hash, Award, MonitorPlay, ChevronRight } from "lucide-react";
+import { Plus, Play, Edit3, Trash2, Clock, Hash, Award, MonitorPlay, ChevronRight, FileText } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -315,6 +315,12 @@ export default function UnifiedDashboard() {
                     <div className={`mt-1 text-sm font-semibold ${rankView.colorClass}`}>
                       {rankView.label}
                     </div>
+                    <Link
+                      href={`/dashboard/reports/${entry.session_id}`}
+                      className="mt-2 inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/20"
+                    >
+                      <FileText size={12} /> View Report
+                    </Link>
                   </div>
                 </motion.div>
                 );

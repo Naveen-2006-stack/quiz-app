@@ -116,18 +116,32 @@ export default function SessionAnalyticsReportPage() {
 
       const isAdmin = profile?.role === "admin";
 
-      let sessionQuery = supabase
+      const { data: sData, error: sErr } = await supabase
         .from("live_sessions")
-        .select("id, quiz_id, started_at, finished_at, quizzes(title)")
-        .eq("id", sessionId);
-
-      if (!isAdmin) {
-        sessionQuery = sessionQuery.eq("teacher_id", user.id);
-      }
-
-      const { data: sData, error: sErr } = await sessionQuery.single();
+        .select("id, quiz_id, teacher_id, started_at, finished_at, quizzes(title)")
+        .eq("id", sessionId)
+        .single();
 
       if (sErr || !sData) {
+        setError("Could not load this report. It may not exist or you may not have access.");
+        setLoading(false);
+        return;
+      }
+
+      let isParticipant = false;
+      const deviceUuid = typeof window !== "undefined" ? localStorage.getItem("kahoot_device_uuid") : null;
+      if (deviceUuid) {
+        const { data: participant } = await supabase
+          .from("participants")
+          .select("id")
+          .eq("session_id", sessionId)
+          .eq("device_uuid", deviceUuid)
+          .maybeSingle();
+        isParticipant = !!participant;
+      }
+
+      const isHost = (sData as any).teacher_id === user.id;
+      if (!isAdmin && !isHost && !isParticipant) {
         setError("Could not load this report. It may not exist or you may not have access.");
         setLoading(false);
         return;

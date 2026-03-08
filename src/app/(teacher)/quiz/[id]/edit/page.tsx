@@ -60,7 +60,7 @@ export default function QuizEditor() {
       id: crypto.randomUUID(), // Temp ID for React key
       question_text: "",
       question_type: "mcq",
-      time_limit: 20,
+      time_limit: 40,
       base_points: 100,
       order_index: questions.length,
       options: MCQ_DEFAULT_OPTIONS,
@@ -277,7 +277,7 @@ export default function QuizEditor() {
                         value={q.time_limit} onChange={e => updateQuestion(qIdx, "time_limit", parseInt(e.target.value))}
                         className="bg-transparent text-slate-900 dark:text-white font-semibold outline-none cursor-pointer"
                       >
-                        {[10, 20, 30, 60, 90].map(t => <option key={t} value={t}>{t}s</option>)}
+                        {[10, 20, 30, 40, 60, 90].map(t => <option key={t} value={t}>{t}s</option>)}
                       </select>
                     </div>
                     <div className="flex items-center gap-2 bg-gray-50 dark:bg-slate-900 px-4 py-2 rounded-xl border border-gray-200 dark:border-white/10">

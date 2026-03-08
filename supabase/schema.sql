@@ -27,7 +27,7 @@ CREATE TABLE questions (
   question_text TEXT NOT NULL,
   question_type TEXT NOT NULL DEFAULT 'mcq' CHECK (question_type IN ('mcq', 'true_false')),
   options JSONB NOT NULL, -- Array of {text: string, is_correct: boolean}
-  time_limit INTEGER DEFAULT 20, -- Seconds
+  time_limit INTEGER DEFAULT 40, -- Seconds
   base_points INTEGER DEFAULT 100,
   order_index INTEGER NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
