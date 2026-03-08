@@ -6,8 +6,15 @@ import { supabase } from "@/lib/supabase/client";
 import { useLiveSession } from "@/hooks/useLiveSession";
 import { useGameStore } from "@/store/useGameStore";
 import { ActiveQuestionCard } from "@/components/game/ActiveQuestionCard";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { LayoutDashboard } from "lucide-react";
+
+interface FloatingEmoji {
+  id: string;
+  emoji: string;
+  studentName?: string;
+  xOffset: number;
+}
 
 export default function StudentPlayRoom() {
   const router = useRouter();
@@ -33,6 +40,8 @@ export default function StudentPlayRoom() {
   const reactionChannelRef = useRef<any>(null);
   // Ghost Mode: fetched from the user's OWN profile — never exposed to host or peers
   const [isGhostMode, setIsGhostMode] = useState(false);
+  // Universal emoji floats — same logic as Host screen
+  const [floatingEmojis, setFloatingEmojis] = useState<FloatingEmoji[]>([]);
 
   useLiveSession(sessionId, "student");
 
@@ -64,14 +73,31 @@ export default function StudentPlayRoom() {
     };
   }, [sessionId, participantId, participantName]);
 
-  // Realtime channel for emoji reactions from waiting room
+  // ── Emoji reactions: send + receive on the SAME game-room channel as the host ──
+  // Previously the student used a separate 'emoji-room' channel which meant
+  // (a) the host never received emojis from students, and
+  // (b) students never saw each other's emojis.
+  // Fix: join the shared 'game-room' channel and listen for emoji_reaction broadcasts.
   useEffect(() => {
     if (!sessionId) return;
-    const reactionChannel = supabase.channel(`emoji-room:${sessionId}`).subscribe();
-    reactionChannelRef.current = reactionChannel;
+    const gameEmojiChannel = supabase
+      .channel(`game-room:${sessionId}`)
+      .on("broadcast", { event: "emoji_reaction" }, (payload) => {
+        const emoji = payload?.payload?.emoji as string | undefined;
+        const studentName = payload?.payload?.studentName as string | undefined;
+        if (!emoji) return;
+        const id = `${Date.now()}-${Math.random()}`;
+        const xOffset = Math.floor(Math.random() * 260) - 130;
+        setFloatingEmojis((prev) => [...prev, { id, emoji, studentName, xOffset }]);
+        setTimeout(() => {
+          setFloatingEmojis((prev) => prev.filter((item) => item.id !== id));
+        }, 2000);
+      })
+      .subscribe();
+    reactionChannelRef.current = gameEmojiChannel;
     return () => {
       reactionChannelRef.current = null;
-      void supabase.removeChannel(reactionChannel);
+      void supabase.removeChannel(gameEmojiChannel);
     };
   }, [sessionId]);
 
@@ -232,6 +258,26 @@ export default function StudentPlayRoom() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex flex-col p-4 md:p-8">
+
+      {/* ── Universal floating emoji overlay (mirrors Host screen) ── */}
+      <div className="pointer-events-none fixed inset-0 z-[60] overflow-hidden">
+        <AnimatePresence>
+          {floatingEmojis.map((item) => (
+            <motion.div
+              key={item.id}
+              initial={{ y: 50, opacity: 0, scale: 0.8 }}
+              animate={{ y: -200, opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.6 }}
+              transition={{ duration: 1.8, ease: "easeOut" }}
+              className="absolute bottom-10 left-1/2 text-4xl drop-shadow-2xl"
+              style={{ transform: `translateX(${item.xOffset}px)` }}
+              title={item.studentName || "Student"}
+            >
+              {item.emoji}
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
       {/* Top Header */}
       <header className="flex justify-between items-center mb-10">
         <h1 className="text-xl font-bold text-slate-800 dark:text-white truncate">
