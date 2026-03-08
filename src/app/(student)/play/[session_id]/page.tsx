@@ -309,7 +309,7 @@ export default function StudentPlayRoom() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex flex-col p-4 md:p-8">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex flex-col p-4 md:p-8 pt-20 md:pt-24">
 
       {/* ── Universal floating emoji overlay (mirrors Host screen) ── */}
       <div className="pointer-events-none fixed inset-0 z-[60] overflow-hidden">
