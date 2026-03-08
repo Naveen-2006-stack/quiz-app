@@ -14,19 +14,12 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
       const { data: { session } } = await supabase.auth.getSession();
       const user = session?.user;
       if (!user) {
-        console.warn("Teacher layout: Unauthenticated user, redirecting back to login");
         router.push("/login");
         return;
       }
 
-      const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-      
-      if (profile?.role === "teacher" || profile?.role === "admin") {
-        setAuthorized(true);
-      } else {
-        // Students cannot access teacher routes
-        router.push("/dashboard");
-      }
+      // Any authenticated user can access quiz creation/editing/hosting routes.
+      setAuthorized(true);
     };
 
     checkAccess();
