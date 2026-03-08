@@ -36,9 +36,13 @@ export async function proxy(request: NextRequest) {
 
   const url = request.nextUrl.clone()
   const isAuthRoute = url.pathname.startsWith('/login')
-  const isProtectedRoute = url.pathname.startsWith('/dashboard') || 
-                           url.pathname.startsWith('/teacher-dashboard') || 
-                           url.pathname.startsWith('/admin-dashboard')
+  const isProtectedRoute =
+    url.pathname.startsWith('/dashboard') ||
+    url.pathname.startsWith('/profile') ||
+    url.pathname.startsWith('/feedback') ||
+    url.pathname.startsWith('/host') ||
+    url.pathname.startsWith('/quiz') ||
+    url.pathname.startsWith('/admin-dashboard')
 
   // Redirect logic
   if (!user && isProtectedRoute) {

@@ -7,34 +7,37 @@ import { useLiveSession } from "@/hooks/useLiveSession";
 import { useGameStore } from "@/store/useGameStore";
 import { ActiveQuestionCard } from "@/components/game/ActiveQuestionCard";
 import { motion } from "framer-motion";
+import { LayoutDashboard } from "lucide-react";
 
 export default function StudentPlayRoom() {
   const router = useRouter();
   const params = useParams();
   const sessionId = params.session_id as string;
-  
+
   const [sessionInfo, setSessionInfo] = useState<any>(null);
   const [questions, setQuestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [revealedQuestionIndex, setRevealedQuestionIndex] = useState<number | null>(null);
-  
-  // Realtime hooks
-  const sessionStatus = useGameStore(s => s.sessionStatus);
-  const currentQuestionIndex = useGameStore(s => s.currentQuestionIndex);
-  const setSessionStatus = useGameStore(s => s.setSessionStatus);
-  const setCurrentQuestionIndex = useGameStore(s => s.setCurrentQuestionIndex);
-  
-  // Local Participant State
+
+  // Zustand Game State
+  const sessionStatus = useGameStore((s) => s.sessionStatus);
+  const currentQuestionIndex = useGameStore((s) => s.currentQuestionIndex);
+  const setSessionStatus = useGameStore((s) => s.setSessionStatus);
+  const setCurrentQuestionIndex = useGameStore((s) => s.setCurrentQuestionIndex);
+
+  // Local participant state
   const [participantId, setParticipantId] = useState<string | null>(null);
-  const [participantName, setParticipantName] = useState<string>("Student");
+  const [participantName, setParticipantName] = useState("Student");
   const [streak, setStreak] = useState(0);
 
-  useLiveSession(sessionId, 'student');
+  useLiveSession(sessionId, "student");
 
+  // Init room data
   useEffect(() => {
     initPlayRoom();
   }, [sessionId]);
 
+  // Anti-cheat: tab switch detection
   useEffect(() => {
     if (!sessionId) return;
 
@@ -42,70 +45,55 @@ export default function StudentPlayRoom() {
 
     const onVisibilityChange = async () => {
       if (!document.hidden || !participantId) return;
-
       await gameRoomChannel.send({
         type: "broadcast",
         event: "anti_cheat_violation",
-        payload: {
-          studentName: participantName,
-          studentId: participantId,
-        },
+        payload: { studentName: participantName, studentId: participantId },
       });
-
       await supabase.rpc("increment_cheat_flags", { p_id: participantId });
     };
 
     document.addEventListener("visibilitychange", onVisibilityChange);
-
     return () => {
       document.removeEventListener("visibilitychange", onVisibilityChange);
-      supabase.removeChannel(gameRoomChannel);
+      void supabase.removeChannel(gameRoomChannel);
     };
   }, [sessionId, participantId, participantName]);
 
+  // Listen for answer-reveal broadcasts from host
   useEffect(() => {
     if (!sessionId) return;
-
     const controlChannel = supabase
       .channel(`session_control:${sessionId}`)
-      .on('broadcast', { event: 'reveal_answer' }, (payload) => {
-        const revealedIdx = payload?.payload?.questionIndex;
-        if (typeof revealedIdx === 'number') {
-          setRevealedQuestionIndex(revealedIdx);
-        }
+      .on("broadcast", { event: "reveal_answer" }, (payload) => {
+        const idx = payload?.payload?.questionIndex;
+        if (typeof idx === "number") setRevealedQuestionIndex(idx);
       })
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(controlChannel);
-    };
+    return () => { void supabase.removeChannel(controlChannel); };
   }, [sessionId]);
 
+  // Reset reveal state when question advances
   useEffect(() => {
     setRevealedQuestionIndex(null);
   }, [currentQuestionIndex]);
 
   const initPlayRoom = async () => {
     const uuid = localStorage.getItem("kahoot_device_uuid");
-    if (!uuid) {
-      router.push("/join");
-      return;
-    }
+    if (!uuid) { router.push("/join"); return; }
 
-    // 1. Get Session & Quiz Data
     const { data: sData } = await supabase
       .from("live_sessions")
       .select("*, quizzes(title)")
       .eq("id", sessionId)
       .single();
-    
+
     if (sData) {
       setSessionInfo(sData);
       setSessionStatus(sData.status);
-      setCurrentQuestionIndex(sData.current_question_index);
+      setCurrentQuestionIndex(sData.current_question_index ?? 0);
     }
 
-    // 2. Hydrate Questions
     if (sData?.quiz_id) {
       const { data: qData } = await supabase
         .from("questions")
@@ -115,7 +103,6 @@ export default function StudentPlayRoom() {
       if (qData) setQuestions(qData);
     }
 
-    // 3. Authenticate local UUID as participant
     const { data: pData } = await supabase
       .from("participants")
       .select("id, streak, display_name")
@@ -128,38 +115,36 @@ export default function StudentPlayRoom() {
       setParticipantName(pData.display_name || "Student");
       setStreak(pData.streak || 0);
     } else {
-      router.push("/join"); // Fallback if unregistered
+      router.push("/join");
+      return;
     }
-    
+
     setLoading(false);
   };
 
+  // ── Feature 2: Two-step submission ──
+  // This now receives the FINAL confirmed answer from ActiveQuestionCard
   const handleAnswerSubmit = async (optionIdx: number, reactionMs: number) => {
-    if (!participantId || questions.length === 0) return;
+    if (!participantId || !questions.length) return;
 
     const q = questions[currentQuestionIndex];
     if (!q) return;
 
     const selectedOpt = q.options[optionIdx];
-    const isCorrect = selectedOpt ? selectedOpt.is_correct : false;
+    const isCorrect = optionIdx >= 0 ? (selectedOpt?.is_correct ?? false) : false;
 
-    // Time decay calculation: 
-    // max points if answered at 0 ms. 
-    // linearly drops to 50% points if answered at very last millisecond
     const maxTime = q.time_limit * 1000;
     const timeRatio = Math.max(0, maxTime - reactionMs) / maxTime;
-    let pointsAwarded = Math.round((q.base_points * 0.5) + (q.base_points * 0.5 * timeRatio));
+    let pointsAwarded = isCorrect
+      ? Math.round(q.base_points * 0.5 + q.base_points * 0.5 * timeRatio)
+      : 0;
 
-    if (!isCorrect) {
-      pointsAwarded = 0;
-      setStreak(0); // reset streak visually immediately
-    } else {
-      setStreak(prev => prev + 1); // update streak visually
-    }
-
-    const currentStreak = isCorrect ? streak + 1 : 0;
-    const streakBonus = currentStreak >= 3 ? Math.min(300, currentStreak * 50) : 0;
+    const newStreak = isCorrect ? streak + 1 : 0;
+    const streakBonus = newStreak >= 3 ? Math.min(300, newStreak * 50) : 0;
     pointsAwarded += streakBonus;
+
+    // Optimistic streak update so UI feels instant
+    setStreak(newStreak);
 
     // Record response
     await supabase.from("student_responses").insert({
@@ -169,42 +154,68 @@ export default function StudentPlayRoom() {
       reaction_time_ms: reactionMs,
       is_correct: isCorrect,
       points_awarded: pointsAwarded,
-      streak_bonus: streakBonus
+      streak_bonus: streakBonus,
     });
 
-    // We must RPC to atomically increment total score, but for now we'll do read-modify-write
-    const { data: pRead } = await supabase.from("participants").select("score").eq("id", participantId).single();
+    // Atomic score + streak update
+    const { data: pRead } = await supabase
+      .from("participants")
+      .select("score")
+      .eq("id", participantId)
+      .single();
+
     if (pRead) {
-      await supabase.from("participants").update({
-        score: pRead.score + pointsAwarded,
-        streak: currentStreak
-      }).eq("id", participantId);
+      await supabase
+        .from("participants")
+        .update({ score: pRead.score + pointsAwarded, streak: newStreak })
+        .eq("id", participantId);
     }
   };
 
-  if (loading) return null;
+  // ── Feature 4: Back to Dashboard (clears local game state) ──
+  const handleBackToDashboard = () => {
+    // Clear the device UUID so the player can join a fresh session next time
+    // We intentionally keep it so they can reconnect to a game mid-session if they close the tab
+    router.push("/dashboard");
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-10 h-10 rounded-full border-4 border-indigo-200 border-t-indigo-600 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex flex-col p-4 md:p-8">
       {/* Top Header */}
-      <header className="flex justify-between items-center mb-12">
+      <header className="flex justify-between items-center mb-10">
         <h1 className="text-xl font-bold text-slate-800 dark:text-white truncate">
           {sessionInfo?.quizzes?.title}
         </h1>
-        <div className="px-4 py-2 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-100 dark:border-white/10 text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+        <div className="px-4 py-1.5 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-100 dark:border-white/10 text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
           {sessionStatus}
         </div>
       </header>
 
-      {/* Main Content Area */}
+      {/* Main content area */}
       <main className="flex-1 flex flex-col items-center justify-center">
-        {sessionStatus === 'waiting' && (
+
+        {/* WAITING: lobby */}
+        {sessionStatus === "waiting" && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
-            <h2 className="text-4xl font-extrabold text-slate-900 dark:text-white mb-4 tracking-tight">You're In!</h2>
-            <p className="text-xl text-slate-500 dark:text-slate-400">See your nickname on the screen.</p>
+            <div className="text-6xl mb-6">🎮</div>
+            <h2 className="text-4xl font-extrabold text-slate-900 dark:text-white mb-3 tracking-tight">
+              You're In, {participantName}!
+            </h2>
+            <p className="text-xl text-slate-500 dark:text-slate-400">Your name is on the screen. Get ready!</p>
             <div className="mt-12 flex justify-center gap-2">
-              {[0, 1, 2].map(i => (
-                <motion.div key={i} animate={{ y: [0, -10, 0] }} transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.2 }}
+              {[0, 1, 2].map((i) => (
+                <motion.div
+                  key={i}
+                  animate={{ y: [0, -12, 0] }}
+                  transition={{ duration: 0.7, repeat: Infinity, delay: i * 0.22 }}
                   className="w-4 h-4 bg-indigo-500 rounded-full"
                 />
               ))}
@@ -212,7 +223,8 @@ export default function StudentPlayRoom() {
           </motion.div>
         )}
 
-        {sessionStatus === 'active' && questions[currentQuestionIndex] && (
+        {/* ACTIVE: question with 2-step submission (handled inside ActiveQuestionCard) */}
+        {sessionStatus === "active" && questions[currentQuestionIndex] && (
           <ActiveQuestionCard
             key={questions[currentQuestionIndex].id}
             question={questions[currentQuestionIndex].question_text}
@@ -224,11 +236,27 @@ export default function StudentPlayRoom() {
           />
         )}
 
-        {sessionStatus === 'finished' && (
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center">
-            <div className="text-6xl mb-6">🏆</div>
-            <h2 className="text-5xl font-extrabold text-slate-900 dark:text-white mb-4 tracking-tight">Game Over!</h2>
-            <p className="text-xl text-slate-500 dark:text-slate-400">Check the main screen for your final rank and score.</p>
+        {/* FINISHED: Game over with back button */}
+        {sessionStatus === "finished" && (
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="text-center max-w-sm w-full"
+          >
+            <div className="text-7xl mb-6">🏆</div>
+            <h2 className="text-5xl font-extrabold text-slate-900 dark:text-white mb-3 tracking-tight">
+              Game Over!
+            </h2>
+            <p className="text-xl text-slate-500 dark:text-slate-400 mb-10">
+              Check the host screen for your final ranking and score.
+            </p>
+            {/* ── Feature 4: Back to Dashboard ── */}
+            <button
+              onClick={handleBackToDashboard}
+              className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-lg shadow-xl shadow-indigo-600/30 transition-all"
+            >
+              <LayoutDashboard size={22} /> Back to Dashboard
+            </button>
           </motion.div>
         )}
       </main>

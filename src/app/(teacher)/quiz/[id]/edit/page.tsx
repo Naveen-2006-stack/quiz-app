@@ -19,6 +19,7 @@ export default function QuizEditor() {
   const [quiz, setQuiz] = useState<Quiz>({ id: quizId, title: "Loading...", description: "" });
   const [questions, setQuestions] = useState<Question[]>([]);
   const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
     fetchQuizData();
@@ -79,12 +80,17 @@ export default function QuizEditor() {
 
   const saveQuiz = async () => {
     setSaving(true);
+    setSaveStatus(null);
+    const errors: string[] = [];
     try {
       // 1. Update Quiz Title/Desc
-      const { error: quizError } = await supabase.from("quizzes").update({ title: quiz.title, description: quiz.description }).eq("id", quiz.id);
-      if (quizError) console.error("Error updating quiz:", quizError);
+      const { error: quizError } = await supabase
+        .from('quizzes')
+        .update({ title: quiz.title, description: quiz.description })
+        .eq('id', quiz.id);
+      if (quizError) errors.push(`Quiz details: ${quizError.message}`);
 
-      // 2. Upsert Questions
+      // 2. Upsert Questions one by one
       for (let i = 0; i < questions.length; i++) {
         const q = questions[i];
         const payload = {
@@ -93,22 +99,29 @@ export default function QuizEditor() {
           time_limit: q.time_limit,
           base_points: q.base_points,
           options: q.options,
-          order_index: i
+          order_index: i,
         };
 
         if (q._isNew) {
-          const { error: insertError } = await supabase.from("questions").insert([payload]);
-          if (insertError) console.error("Error inserting question:", insertError);
+          const { error: insertError } = await supabase.from('questions').insert([payload]);
+          if (insertError) errors.push(`Question ${i + 1} insert: ${insertError.message}`);
         } else {
-          const { error: updateError } = await supabase.from("questions").update(payload).eq("id", q.id);
-          if (updateError) console.error("Error updating question:", updateError);
+          const { error: updateError } = await supabase.from('questions').update(payload).eq('id', q.id);
+          if (updateError) errors.push(`Question ${i + 1} update: ${updateError.message}`);
         }
       }
 
-      // Refresh to get actual UUIDs for newly inserted questions
+      // Refresh to get real UUIDs for newly-inserted questions
       await fetchQuizData();
-    } catch (error) {
-      console.error("Error saving quiz:", error);
+
+      if (errors.length > 0) {
+        setSaveStatus({ type: 'error', message: errors.join(' | ') });
+      } else {
+        setSaveStatus({ type: 'success', message: `Quiz saved! ${questions.length} question${questions.length !== 1 ? 's' : ''} saved successfully.` });
+        setTimeout(() => setSaveStatus(null), 4000);
+      }
+    } catch (err: any) {
+      setSaveStatus({ type: 'error', message: err?.message || 'Unexpected error saving quiz.' });
     } finally {
       setSaving(false);
     }
@@ -119,17 +132,28 @@ export default function QuizEditor() {
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-white/10">
         <Link href="/dashboard" className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 transition-colors">
-          <ArrowLeft size={20} /> Back
+          <ArrowLeft size={20} /> Back to Dashboard
         </Link>
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <button
             onClick={saveQuiz} disabled={saving}
             className="flex-1 sm:flex-none flex justify-center items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-6 py-2.5 rounded-xl font-medium shadow-lg shadow-indigo-600/20 transition-all"
           >
-            <Save size={18} /> {saving ? "Saving..." : "Save Quiz"}
+            <Save size={18} /> {saving ? 'Saving…' : 'Save Quiz'}
           </button>
         </div>
       </div>
+
+      {/* Save Status Banner */}
+      {saveStatus && (
+        <div className={`px-5 py-4 rounded-2xl font-semibold text-sm ${
+          saveStatus.type === 'success'
+            ? 'bg-emerald-50 border border-emerald-300 text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/30 dark:text-emerald-400'
+            : 'bg-rose-50 border border-rose-300 text-rose-700 dark:bg-rose-500/10 dark:border-rose-500/30 dark:text-rose-400'
+        }`}>
+          {saveStatus.type === 'success' ? '✅ ' : '❌ '}{saveStatus.message}
+        </div>
+      )}
 
       {/* Quiz Details Form */}
       <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-white/10 space-y-6">

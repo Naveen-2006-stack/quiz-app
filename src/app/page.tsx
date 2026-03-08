@@ -12,7 +12,7 @@ export default function Home() {
       <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-emerald-500/20 blur-[120px] rounded-full pointer-events-none" />
 
       {/* Navbar */}
-      <nav className="sticky top-3 z-20 mx-3 sm:mx-4 px-6 py-4 rounded-2xl bg-white/70 dark:bg-slate-900/50 backdrop-blur-xl border border-white/20 dark:border-slate-800/50 shadow-[0_10px_30px_rgba(15,23,42,0.08)] dark:shadow-[0_10px_40px_rgba(2,6,23,0.45)] max-w-7xl flex justify-between items-center">
+      <nav className="sticky top-3 z-20 mx-auto w-[calc(100%-1.5rem)] sm:w-[calc(100%-2rem)] max-w-7xl px-6 py-4 rounded-2xl bg-white/70 dark:bg-slate-900/50 backdrop-blur-xl border border-white/20 dark:border-slate-800/50 shadow-[0_10px_30px_rgba(15,23,42,0.08)] dark:shadow-[0_10px_40px_rgba(2,6,23,0.45)] flex justify-between items-center">
         <Link href="/" className="group flex items-center gap-2">
           <Image
             src="/logo.png"
@@ -27,7 +27,7 @@ export default function Home() {
         </Link>
         <div className="flex gap-4">
           <Link href="/login" className="text-slate-600 dark:text-slate-300 font-semibold hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors px-4 py-2">
-            Sign In with Google
+            Sign In
           </Link>
         </div>
       </nav>
