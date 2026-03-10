@@ -88,7 +88,7 @@ export default function StudentPlayRoom() {
     if (!sessionId) return;
     const gameEmojiChannel = supabase
       .channel(`game-room:${sessionId}`)
-      .on("broadcast", { event: "emoji_reaction" }, (payload) => {
+      .on("broadcast", { event: "emoji_reaction" }, (payload: any) => {
         const emoji = payload?.payload?.emoji as string | undefined;
         const studentName = payload?.payload?.studentName as string | undefined;
         if (!emoji) return;
@@ -98,6 +98,14 @@ export default function StudentPlayRoom() {
         setTimeout(() => {
           setFloatingEmojis((prev) => prev.filter((item) => item.id !== id));
         }, 2000);
+      })
+      .on("broadcast", { event: "kick_player" }, (payload: any) => {
+        const targetId = payload?.payload?.targetId as string | undefined;
+        if (targetId && targetId === participantId) {
+          // You've been banished by the Host!
+          supabase.removeAllChannels();
+          router.push("/dashboard?error=kicked");
+        }
       })
       .subscribe();
     reactionChannelRef.current = gameEmojiChannel;
@@ -117,7 +125,7 @@ export default function StudentPlayRoom() {
             table: "profiles",
             filter: `id=eq.${session.user.id}`
           },
-          (payload) => {
+          (payload: any) => {
             if (payload.new && 'ghost_mode' in payload.new) {
               setIsGhostMode(!!payload.new.ghost_mode);
             }
@@ -142,7 +150,7 @@ export default function StudentPlayRoom() {
     if (!sessionId) return;
     const controlChannel = supabase
       .channel(`session_control:${sessionId}`)
-      .on("broadcast", { event: "reveal_answer" }, (payload) => {
+      .on("broadcast", { event: "reveal_answer" }, (payload: any) => {
         const idx = payload?.payload?.questionIndex;
         if (typeof idx === "number") setRevealedQuestionIndex(idx);
       })
@@ -161,7 +169,7 @@ export default function StudentPlayRoom() {
 
     const { data: sData } = await supabase
       .from("live_sessions")
-      .select("*, quizzes(title)")
+      .select("*, quizzes(title, timer_based_marking)")
       .eq("id", sessionId)
       .single();
 
@@ -224,7 +232,9 @@ export default function StudentPlayRoom() {
     const isCorrect = optionIdx >= 0 ? (selectedOpt?.is_correct ?? false) : false;
 
     const maxTime = q.time_limit * 1000;
-    const timeRatio = Math.max(0, maxTime - reactionMs) / maxTime;
+    const isTimerEnabled = sessionInfo?.quizzes?.timer_based_marking !== false;
+    const timeRatio = isTimerEnabled ? (Math.max(0, maxTime - reactionMs) / maxTime) : 1;
+
     let pointsAwarded = isCorrect
       ? Math.round(q.base_points * 0.5 + q.base_points * 0.5 * timeRatio)
       : 0;
@@ -348,11 +358,11 @@ export default function StudentPlayRoom() {
             </button>
           )}
         </div>
-        
+
         <h1 className="flex-1 text-xl font-bold text-slate-800 dark:text-white truncate text-center absolute left-1/2 -translate-x-1/2">
           {sessionInfo?.quizzes?.title}
         </h1>
-        
+
         <div className="flex-1 flex justify-end">
           <div className="px-4 py-1.5 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-100 dark:border-white/10 text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
             {sessionStatus}

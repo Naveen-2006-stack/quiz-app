@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase/client";
 import { useLiveSession } from "@/hooks/useLiveSession";
 import { useGameStore } from "@/store/useGameStore";
 import { motion, AnimatePresence } from "framer-motion";
-import { Users, Play, Copy, Check, ArrowLeft, CheckSquare, LayoutDashboard } from "lucide-react";
+import { Users, Play, Copy, Check, ArrowLeft, CheckSquare, LayoutDashboard, ShieldAlert, XCircle, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface LiveSession {
@@ -20,7 +20,7 @@ interface LiveSession {
 interface FlaggedStudent {
   studentId: string;
   studentName: string;
-  flaggedAt: string;
+  strikes: number;
 }
 
 interface FloatingEmoji {
@@ -80,16 +80,20 @@ export default function HostRoom() {
     if (!sessionId) return;
     const gameRoomChannel = supabase
       .channel(`game-room:${sessionId}`)
-      .on("broadcast", { event: "anti_cheat_violation" }, (payload) => {
+      .on("broadcast", { event: "anti_cheat_violation" }, (payload: any) => {
         const studentId = payload?.payload?.studentId as string | undefined;
         const studentName = payload?.payload?.studentName as string | undefined;
         if (!studentId) return;
-        setFlaggedStudents((prev) => [
-          ...prev,
-          { studentId, studentName: studentName || "Unknown", flaggedAt: new Date().toISOString() },
-        ]);
+
+        setFlaggedStudents((prev) => {
+          const existing = prev.find(f => f.studentId === studentId);
+          if (existing) {
+            return prev.map(f => f.studentId === studentId ? { ...f, strikes: f.strikes + 1 } : f);
+          }
+          return [...prev, { studentId, studentName: studentName || "Unknown", strikes: 1 }];
+        });
       })
-      .on("broadcast", { event: "emoji_reaction" }, (payload) => {
+      .on("broadcast", { event: "emoji_reaction" }, (payload: any) => {
         const emoji = payload?.payload?.emoji as string | undefined;
         const studentName = payload?.payload?.studentName as string | undefined;
         if (!emoji) return;
@@ -128,7 +132,7 @@ export default function HostRoom() {
           table: "student_responses",
           filter: `session_id=eq.${sessionId}`,
         },
-        (payload) => {
+        (payload: any) => {
           // Only count responses for the current question
           if ((payload.new as any).question_id === qId) {
             setSubmissionCount((c) => c + 1);
@@ -222,6 +226,28 @@ export default function HostRoom() {
     setAdvancingQuestion(false);
   };
 
+  const kickParticipant = async (pId: string) => {
+    if (!sessionId || !controlChannelRef.current) return;
+
+    // 1. Delete from Supabase
+    const { error } = await supabase.from("participants").delete().eq("id", pId).eq("session_id", sessionId);
+    if (error) {
+      console.error("Failed to kick participant:", error.message);
+      return;
+    }
+
+    // 2. Broadcast kick event
+    await controlChannelRef.current.send({
+      type: "broadcast",
+      event: "kick_player",
+      payload: { targetId: pId },
+    });
+
+    // 3. Local state update
+    setParticipants(Object.values(participantsMap).filter(p => p.id !== pId));
+    setFlaggedStudents(prev => prev.filter(f => f.studentId !== pId));
+  };
+
   // ── Feature 4: Back to Dashboard (clears game state) ──
   const handleBackToDashboard = () => {
     // Clear any game-local state; Zustand resets on next mount
@@ -263,13 +289,33 @@ export default function HostRoom() {
 
         {/* Security Flags */}
         {flaggedStudents.length > 0 && (
-          <div className="mb-6 rounded-2xl border border-rose-300 bg-rose-50 p-4 dark:border-rose-500/40 dark:bg-rose-500/10">
-            <h3 className="text-sm font-extrabold uppercase tracking-wide text-rose-700 dark:text-rose-300 mb-2">Security Flags</h3>
-            {flaggedStudents.map((f) => (
-              <div key={`${f.studentId}-${f.flaggedAt}`} className="text-sm font-semibold text-rose-600 dark:text-rose-400 py-1">
-                ⚠️ {f.studentName} switched tabs
-              </div>
-            ))}
+          <div className="mb-6 rounded-2xl border border-rose-300 bg-rose-50 p-6 dark:border-rose-500/30 dark:bg-rose-500/10 shadow-lg shadow-rose-500/10">
+            <div className="flex items-center gap-2 mb-4">
+              <ShieldAlert className="text-rose-600 dark:text-rose-400" size={20} />
+              <h3 className="text-sm font-extrabold uppercase tracking-widest text-rose-700 dark:text-rose-300">Active Violations (Strikes)</h3>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {flaggedStudents.map((f) => {
+                const strikeColor = f.strikes >= 3 ? "bg-rose-600 text-white" : f.strikes === 2 ? "bg-orange-500 text-white" : "bg-amber-400 text-white";
+                return (
+                  <div key={f.studentId} className="flex items-center justify-between bg-white dark:bg-slate-900 border border-rose-100 dark:border-rose-500/20 p-3 rounded-xl">
+                    <div className="flex items-center gap-3">
+                      <span className={cn("px-2 py-0.5 rounded-lg text-xs font-black", strikeColor)}>
+                        {f.strikes} {f.strikes === 1 ? 'STRIKE' : 'STRIKES'}
+                      </span>
+                      <span className="font-bold text-slate-800 dark:text-slate-200">{f.studentName}</span>
+                    </div>
+                    <button
+                      onClick={() => kickParticipant(f.studentId)}
+                      className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors group"
+                      title="Kick Player"
+                    >
+                      <XCircle size={18} className="group-hover:scale-110 transition-transform" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -334,8 +380,8 @@ export default function HostRoom() {
                 {advancingQuestion
                   ? "Revealing…"
                   : currentQuestionIndex >= questions.length - 1
-                  ? "End Game"
-                  : "Next Question →"}
+                    ? "End Game"
+                    : "Next Question →"}
               </motion.button>
             </div>
           </div>
@@ -392,6 +438,15 @@ export default function HostRoom() {
                 <div className="text-3xl font-black tabular-nums text-indigo-600 dark:text-indigo-400">
                   {p.score.toLocaleString()}
                 </div>
+                {sessionStatus === "active" && (
+                  <button
+                    onClick={() => kickParticipant(p.id)}
+                    className="ml-2 p-2.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                    title="Kick Student"
+                  >
+                    <Trash2 size={20} />
+                  </button>
+                )}
               </motion.div>
             ))}
           </AnimatePresence>
@@ -488,9 +543,18 @@ export default function HostRoom() {
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.8 }}
                   transition={{ type: "spring", bounce: 0.6 }}
-                  className="bg-white dark:bg-slate-700 px-5 py-2.5 rounded-xl shadow-md border border-gray-100 dark:border-white/10 font-bold text-lg text-slate-800 dark:text-white"
+                  className="group relative"
                 >
-                  {p.display_name}
+                  <div className="bg-white dark:bg-slate-700 px-5 py-2.5 rounded-xl shadow-md border border-gray-100 dark:border-white/10 font-bold text-lg text-slate-800 dark:text-white">
+                    {p.display_name}
+                  </div>
+                  <button
+                    onClick={() => kickParticipant(p.id)}
+                    className="absolute -top-2 -right-2 p-1 bg-rose-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity transform hover:scale-110 shadow-lg"
+                    title="Remove Player"
+                  >
+                    <XCircle size={16} />
+                  </button>
                 </motion.div>
               ))}
             </div>

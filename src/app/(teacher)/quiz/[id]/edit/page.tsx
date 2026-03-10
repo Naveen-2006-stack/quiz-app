@@ -10,9 +10,9 @@ import Link from "next/link";
 interface Option { text: string; is_correct: boolean; }
 type QuestionType = "mcq" | "true_false";
 interface Question { id: string; question_text: string; question_type: QuestionType; time_limit: number; base_points: number; options: Option[]; order_index: number; _isNew?: boolean; }
-interface Quiz { id: string; title: string; description: string; }
+interface Quiz { id: string; title: string; description: string; timer_based_marking?: boolean; }
 
-const MCQ_DEFAULT_OPTIONS: Option[] = [
+const getMcqDefaultOptions = (): Option[] => [
   { text: "", is_correct: true },
   { text: "", is_correct: false },
   { text: "", is_correct: false },
@@ -29,7 +29,7 @@ export default function QuizEditor() {
   const params = useParams();
   const quizId = params.id as string;
 
-  const [quiz, setQuiz] = useState<Quiz>({ id: quizId, title: "Loading...", description: "" });
+  const [quiz, setQuiz] = useState<Quiz>({ id: quizId, title: "Loading...", description: "", timer_based_marking: true });
   const [questions, setQuestions] = useState<Question[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -49,7 +49,7 @@ export default function QuizEditor() {
       const normalized = (qsData as any[]).map((q) => ({
         ...q,
         question_type: (q.question_type || "mcq") as QuestionType,
-        options: Array.isArray(q.options) ? q.options : MCQ_DEFAULT_OPTIONS,
+        options: Array.isArray(q.options) ? q.options : getMcqDefaultOptions(),
       }));
       setQuestions(normalized as Question[]);
     }
@@ -63,28 +63,30 @@ export default function QuizEditor() {
       time_limit: 40,
       base_points: 100,
       order_index: questions.length,
-      options: MCQ_DEFAULT_OPTIONS,
+      options: getMcqDefaultOptions(),
       _isNew: true
     };
     setQuestions([...questions, newQ]);
   };
 
   const updateQuestion = (index: number, field: keyof Question, value: any) => {
-    const updated = [...questions];
-    updated[index] = { ...updated[index], [field]: value };
-    setQuestions(updated);
+    setQuestions(prev => prev.map((q, i) => i === index ? { ...q, [field]: value } : q));
   };
 
   const updateOption = (qIndex: number, oIndex: number, text: string) => {
-    const updated = [...questions];
-    updated[qIndex].options[oIndex].text = text;
-    setQuestions(updated);
+    setQuestions(prev => prev.map((q, i) => {
+      if (i !== qIndex) return q;
+      const newOptions = q.options.map((opt, j) => j === oIndex ? { ...opt, text } : opt);
+      return { ...q, options: newOptions };
+    }));
   };
 
   const setCorrectOption = (qIndex: number, oIndex: number) => {
-    const updated = [...questions];
-    updated[qIndex].options = updated[qIndex].options.map((opt, i) => ({ ...opt, is_correct: i === oIndex }));
-    setQuestions(updated);
+    setQuestions(prev => prev.map((q, i) => {
+      if (i !== qIndex) return q;
+      const newOptions = q.options.map((opt, j) => ({ ...opt, is_correct: j === oIndex }));
+      return { ...q, options: newOptions };
+    }));
   };
 
   const setQuestionType = (qIndex: number, nextType: QuestionType) => {
@@ -104,10 +106,10 @@ export default function QuizEditor() {
     } else {
       const prev = current.options;
       const padded = [
-        prev[0] || { text: "", is_correct: true },
-        prev[1] || { text: "", is_correct: false },
-        prev[2] || { text: "", is_correct: false },
-        prev[3] || { text: "", is_correct: false },
+        prev[0] ? { ...prev[0] } : { text: "", is_correct: true },
+        prev[1] ? { ...prev[1] } : { text: "", is_correct: false },
+        prev[2] ? { ...prev[2] } : { text: "", is_correct: false },
+        prev[3] ? { ...prev[3] } : { text: "", is_correct: false },
       ];
       updated[qIndex] = {
         ...current,
@@ -134,7 +136,7 @@ export default function QuizEditor() {
       // 1. Update Quiz Title/Desc
       const { error: quizError } = await supabase
         .from('quizzes')
-        .update({ title: quiz.title, description: quiz.description })
+        .update({ title: quiz.title, description: quiz.description, timer_based_marking: quiz.timer_based_marking })
         .eq('id', quiz.id);
       if (quizError) errors.push(`Quiz details: ${quizError.message}`);
 
@@ -195,11 +197,10 @@ export default function QuizEditor() {
 
       {/* Save Status Banner */}
       {saveStatus && (
-        <div className={`px-5 py-4 rounded-2xl font-semibold text-sm ${
-          saveStatus.type === 'success'
-            ? 'bg-emerald-50 border border-emerald-300 text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/30 dark:text-emerald-400'
-            : 'bg-rose-50 border border-rose-300 text-rose-700 dark:bg-rose-500/10 dark:border-rose-500/30 dark:text-rose-400'
-        }`}>
+        <div className={`px-5 py-4 rounded-2xl font-semibold text-sm ${saveStatus.type === 'success'
+          ? 'bg-emerald-50 border border-emerald-300 text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/30 dark:text-emerald-400'
+          : 'bg-rose-50 border border-rose-300 text-rose-700 dark:bg-rose-500/10 dark:border-rose-500/30 dark:text-rose-400'
+          }`}>
           {saveStatus.type === 'success' ? '✅ ' : '❌ '}{saveStatus.message}
         </div>
       )}
@@ -221,6 +222,24 @@ export default function QuizEditor() {
             className="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-slate-900 border border-transparent focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-800 outline-none transition-all dark:text-white resize-none"
             placeholder="What is this quiz about?"
           />
+        </div>
+
+        {/* Timer-based Scoring Toggle */}
+        <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-900/50 rounded-2xl border border-gray-100 dark:border-white/5">
+          <div>
+            <h3 className="text-sm font-bold text-slate-800 dark:text-white">Timer-based Scoring</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Faster answers get more points when enabled</p>
+          </div>
+          <button
+            onClick={() => setQuiz({ ...quiz, timer_based_marking: !quiz.timer_based_marking })}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ring-2 ring-offset-2 ring-transparent focus:ring-indigo-500 ${quiz.timer_based_marking ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-slate-700'
+              }`}
+          >
+            <span
+              className={`${quiz.timer_based_marking ? 'translate-x-6' : 'translate-x-1'
+                } inline-block h-4 w-4 transform rounded-full bg-white transition-transform`}
+            />
+          </button>
         </div>
       </div>
 
@@ -306,7 +325,7 @@ export default function QuizEditor() {
                         className={`relative w-full p-6 rounded-2xl border-2 text-left transition-all ${isTrue
                           ? "bg-blue-500 text-white border-blue-400"
                           : "bg-rose-500 text-white border-rose-400"
-                        } ${opt.is_correct ? "ring-4 ring-white/40 scale-[1.01]" : "opacity-75 hover:opacity-100"}`}
+                          } ${opt.is_correct ? "ring-4 ring-white/40 scale-[1.01]" : "opacity-75 hover:opacity-100"}`}
                       >
                         <div className="flex items-center justify-between">
                           <span className="text-xl font-black tracking-tight">{opt.text}</span>
@@ -323,8 +342,8 @@ export default function QuizEditor() {
                     <div
                       key={oIdx}
                       className={`relative flex items-center p-2 rounded-xl border-2 transition-all ${opt.is_correct
-                          ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-500/10'
-                          : 'border-transparent bg-gray-50 dark:bg-slate-900 focus-within:border-indigo-200 dark:focus-within:border-indigo-500/50'
+                        ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-500/10'
+                        : 'border-transparent bg-gray-50 dark:bg-slate-900 focus-within:border-indigo-200 dark:focus-within:border-indigo-500/50'
                         }`}
                     >
                       <button

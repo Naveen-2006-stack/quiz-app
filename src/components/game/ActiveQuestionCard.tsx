@@ -6,10 +6,10 @@ import { useEffect, useRef, useState } from 'react';
 import { CheckCircle } from 'lucide-react';
 
 const OPTION_COLORS = [
-  { bg: 'bg-rose-500',    hover: 'hover:bg-rose-600',   border: 'border-rose-400',    text: 'text-white', label: 'bg-rose-600'   },
-  { bg: 'bg-blue-500',    hover: 'hover:bg-blue-600',   border: 'border-blue-400',    text: 'text-white', label: 'bg-blue-600'   },
-  { bg: 'bg-amber-500',   hover: 'hover:bg-amber-600',  border: 'border-amber-400',   text: 'text-white', label: 'bg-amber-600'  },
-  { bg: 'bg-emerald-500', hover: 'hover:bg-emerald-600',border: 'border-emerald-400', text: 'text-white', label: 'bg-emerald-600'},
+  { bg: 'bg-rose-500', hover: 'hover:bg-rose-600', border: 'border-rose-400', text: 'text-white', label: 'bg-rose-600' },
+  { bg: 'bg-blue-500', hover: 'hover:bg-blue-600', border: 'border-blue-400', text: 'text-white', label: 'bg-blue-600' },
+  { bg: 'bg-amber-500', hover: 'hover:bg-amber-600', border: 'border-amber-400', text: 'text-white', label: 'bg-amber-600' },
+  { bg: 'bg-emerald-500', hover: 'hover:bg-emerald-600', border: 'border-emerald-400', text: 'text-white', label: 'bg-emerald-600' },
 ];
 
 const OPTION_LABELS = ['A', 'B', 'C', 'D'];
@@ -40,6 +40,7 @@ export const ActiveQuestionCard = ({
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null); // highlighted but not yet submitted
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [shuffledOptions, setShuffledOptions] = useState<{ text: string; is_correct: boolean; originalIndex: number }[]>([]);
   const startTimeRef = useRef(Date.now());
 
   // Reset state when the question changes
@@ -49,7 +50,15 @@ export const ActiveQuestionCard = ({
     setHasSubmitted(false);
     setSubmitting(false);
     startTimeRef.current = Date.now();
-  }, [question, timeLimit]);
+
+    // Client-side Option Shuffling (Anti-Peeking)
+    const indexed = options.map((opt, i) => ({ ...opt, originalIndex: i }));
+    for (let i = indexed.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [indexed[i], indexed[j]] = [indexed[j], indexed[i]];
+    }
+    setShuffledOptions(indexed);
+  }, [question, timeLimit, options]);
 
   // Countdown timer
   useEffect(() => {
@@ -81,13 +90,20 @@ export const ActiveQuestionCard = ({
     setSubmitting(true);
     setHasSubmitted(true);
     const reactionMs = Date.now() - startTimeRef.current;
-    await onAnswer(idx, reactionMs);
+
+    // Use originalIndex for submission so the backend/teacher knows which choice was really picked
+    const originalIdx = idx === -1 ? -1 : (shuffledOptions[idx]?.originalIndex ?? idx);
+    await onAnswer(originalIdx, reactionMs);
     setSubmitting(false);
   };
 
+  const currentSelectionOriginalIdx = selectedIndex !== null && selectedIndex >= 0
+    ? shuffledOptions[selectedIndex]?.originalIndex
+    : null;
+
   const didAnswerCorrectly =
-    hasSubmitted && selectedIndex !== null && selectedIndex >= 0
-      ? !!options[selectedIndex]?.is_correct
+    hasSubmitted && currentSelectionOriginalIdx !== null && currentSelectionOriginalIdx >= 0
+      ? !!options[currentSelectionOriginalIdx]?.is_correct
       : false;
   const showReveal = isRevealed && hasSubmitted;
   const isTrueFalse = questionType === 'true_false';
@@ -170,7 +186,7 @@ export const ActiveQuestionCard = ({
               <p className="text-white/80">Waiting for next question...</p>
             </motion.div>
 
-          /* SUBMITTED — WAITING STATE */
+            /* SUBMITTED — WAITING STATE */
           ) : hasSubmitted ? (
             <motion.div
               key="waiting"
@@ -186,21 +202,21 @@ export const ActiveQuestionCard = ({
               />
               <h3 className="text-2xl font-extrabold text-slate-900 dark:text-white mb-1">
                 {selectedIndex !== null && selectedIndex >= 0
-                  ? `You picked: ${options[selectedIndex]?.text}`
+                  ? `You picked: ${shuffledOptions[selectedIndex]?.text}`
                   : "Time's up!"}
               </h3>
               <p className="text-slate-500 dark:text-slate-400">Waiting for reveal...</p>
             </motion.div>
 
-          /* ANSWER GRID — Select then Confirm */
+            /* ANSWER GRID — Select then Confirm */
           ) : (
             <motion.div key="grid" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <div className={cn('mb-5', isTrueFalse ? 'grid grid-cols-1 sm:grid-cols-2 gap-4' : 'grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-4')}>
-                {options.map((opt, idx) => {
+                {shuffledOptions.map((opt, idx) => {
                   const color = isTrueFalse
                     ? (opt.text.toLowerCase() === 'false'
-                        ? { bg: 'bg-rose-500', hover: 'hover:bg-rose-600', border: 'border-rose-400', text: 'text-white', label: 'bg-rose-600' }
-                        : { bg: 'bg-blue-500', hover: 'hover:bg-blue-600', border: 'border-blue-400', text: 'text-white', label: 'bg-blue-600' })
+                      ? { bg: 'bg-rose-500', hover: 'hover:bg-rose-600', border: 'border-rose-400', text: 'text-white', label: 'bg-rose-600' }
+                      : { bg: 'bg-blue-500', hover: 'hover:bg-blue-600', border: 'border-blue-400', text: 'text-white', label: 'bg-blue-600' })
                     : OPTION_COLORS[idx % OPTION_COLORS.length];
                   const isSelected = selectedIndex === idx;
                   const isGhostReveal = isGhostMode && opt.is_correct;
