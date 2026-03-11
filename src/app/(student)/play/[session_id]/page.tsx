@@ -100,7 +100,7 @@ export default function StudentPlayRoom() {
       await gameRoomChannel.send({
         type: "broadcast",
         event: "anti_cheat_violation",
-        payload: { studentName: participantName, studentId: participantId },
+        payload: { studentName: participantName, studentId: participantId, violationType: type },
       });
       await supabase.rpc("log_violation", {
         p_session_id: sessionId,

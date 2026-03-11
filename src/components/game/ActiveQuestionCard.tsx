@@ -246,13 +246,19 @@ export const ActiveQuestionCard = ({
             <motion.div key="grid" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <div className={cn('mb-5', isTrueFalse ? 'grid grid-cols-1 sm:grid-cols-2 gap-4' : 'grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-4')}>
                 {shuffledOptions.map((opt, idx) => {
-                  const color = isTrueFalse
-                    ? (opt.text.toLowerCase() === 'false'
-                      ? { bg: 'bg-rose-500', hover: 'hover:bg-rose-600', border: 'border-rose-400', text: 'text-white', label: 'bg-rose-600' }
-                      : { bg: 'bg-blue-500', hover: 'hover:bg-blue-600', border: 'border-blue-400', text: 'text-white', label: 'bg-blue-600' })
-                    : OPTION_COLORS[idx % OPTION_COLORS.length];
-                  const isSelected = selectedIndex === idx;
                   const isGhostReveal = isGhostMode && opt.is_correct;
+                  
+                  // In ghost mode, the correct answer uses the "emerald" color set.
+                  // Otherwise, normal colors apply.
+                  const color = isGhostReveal
+                    ? { bg: 'bg-emerald-500', hover: 'hover:bg-emerald-600', border: 'border-emerald-400', text: 'text-white', label: 'bg-emerald-600' }
+                    : isTrueFalse
+                      ? (opt.text.toLowerCase() === 'false'
+                        ? { bg: 'bg-rose-500', hover: 'hover:bg-rose-600', border: 'border-rose-400', text: 'text-white', label: 'bg-rose-600' }
+                        : { bg: 'bg-blue-500', hover: 'hover:bg-blue-600', border: 'border-blue-400', text: 'text-white', label: 'bg-blue-600' })
+                      : OPTION_COLORS[idx % OPTION_COLORS.length];
+                  
+                  const isSelected = selectedIndex === idx;
 
                   return (
                     <motion.button
@@ -267,7 +273,7 @@ export const ActiveQuestionCard = ({
                         isSelected
                           ? `${color.border} ring-4 ring-white/40 scale-[1.02] shadow-xl`
                           : 'border-transparent opacity-70 hover:opacity-100',
-                        isGhostReveal ? 'shadow-[inset_0_0_15px_rgba(255,255,255,0.3)]' : ''
+                        isGhostReveal ? 'shadow-[0_0_20px_rgba(16,185,129,0.5)] border-emerald-400' : ''
                       )}
                     >
                       <span className="flex items-center gap-4">

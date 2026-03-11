@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { motion } from "framer-motion";
-import { Users, Server, BookOpen, Trash2, Ban, RefreshCw, LayoutDashboard, ShieldCheck, Activity, FileText, Eye, EyeOff } from "lucide-react";
+import { Users, Server, BookOpen, Trash2, Ban, RefreshCw, LayoutDashboard, ShieldCheck, Activity, FileText, Eye, EyeOff, MessageSquare } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +21,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState({ totalUsers: 0, activeSessions: 0, totalQuizzes: 0 });
   const [usersList, setUsersList] = useState<any[]>([]);
   const [completedSessionsList, setCompletedSessionsList] = useState<CompletedSessionRow[]>([]);
+  const [feedbackList, setFeedbackList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   // Ghost Mode: tracks which user ID is currently in the 1-second confirmation flash
 
@@ -91,6 +92,17 @@ export default function AdminDashboard() {
       setCompletedSessionsList(mapped);
     }
     
+    // 4. Fetch Feedback
+    const { data: feedbacks } = await supabase
+      .from("course_feedback")
+      .select("id, user_id, rating, content, created_at, profiles(display_name)")
+      .order("created_at", { ascending: false })
+      .limit(50);
+      
+    if (feedbacks) {
+      setFeedbackList(feedbacks);
+    }
+    
     setLoading(false);
   };
 
@@ -105,6 +117,12 @@ export default function AdminDashboard() {
     if (!confirm("Delete this session? This will permanently remove it and all associated response data.")) return;
     await supabase.from('live_sessions').delete().eq('id', id);
     setCompletedSessionsList(prev => prev.filter(s => s.id !== id));
+  };
+  
+  const deleteFeedback = async (id: string) => {
+    if (!confirm("Delete this feedback?")) return;
+    await supabase.from("course_feedback").delete().eq("id", id);
+    setFeedbackList(prev => prev.filter(f => f.id !== id));
   };
 
   /**
@@ -318,6 +336,64 @@ export default function AdminDashboard() {
           </motion.div>
 
         </div>
+        
+        {/* Course Feedback Table */}
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-slate-800/50 overflow-hidden flex flex-col mb-10">
+          <div className="p-6 border-b border-gray-100 dark:border-white/5">
+            <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2"><MessageSquare size={20} className="text-pink-500"/> User Feedback</h2>
+            <p className="text-xs mt-1 text-slate-400">Recent feedback submitted by students</p>
+          </div>
+          <div className="flex-1 overflow-auto max-h-[500px]">
+             <table className="w-full text-left border-collapse">
+                <thead className="sticky top-0 bg-slate-900/95 backdrop-blur z-10 shadow-sm border-b border-slate-800/60">
+                  <tr>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">User</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Rating</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider w-1/2">Feedback</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {feedbackList.map((f) => (
+                    <tr key={f.id} className="hover:bg-slate-800/70 transition-colors group">
+                      <td className="px-6 py-4">
+                        <div className="font-semibold text-slate-100">{f.profiles?.display_name || "Unknown"}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-1 text-amber-500 font-bold">
+                          {f.rating} / 5
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-slate-300 text-sm">
+                        <p className="line-clamp-3">{f.content}</p>
+                      </td>
+                      <td className="px-6 py-4 text-slate-400 text-sm">
+                        {new Date(f.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                         <button
+                            onClick={() => void deleteFeedback(f.id)}
+                            title="Delete feedback"
+                            className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {feedbackList.length === 0 && (
+                     <tr>
+                      <td colSpan={5} className="px-6 py-10 text-center text-slate-400 text-sm">
+                        No feedback submitted yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+             </table>
+          </div>
+        </motion.div>
+
       </div>
     </div>
   );
