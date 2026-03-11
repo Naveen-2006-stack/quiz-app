@@ -17,13 +17,14 @@ const OPTION_LABELS = ['A', 'B', 'C', 'D'];
 interface ActiveQuestionCardProps {
   question: string;
   questionType?: 'mcq' | 'true_false';
-  options: { text: string; is_correct: boolean }[];
+  options: { text: string; is_correct?: boolean }[];
   streak: number;
   timeLimit: number; // seconds
   isRevealed: boolean;
   onAnswer: (index: number, reactionTimeMs: number) => Promise<void> | void;
   /** Ghost Mode: when true, the correct answer button gets the secret micro-tell dot */
   isGhostMode?: boolean;
+  isAlreadyAnswered?: boolean;
 }
 
 export const ActiveQuestionCard = ({
@@ -35,6 +36,7 @@ export const ActiveQuestionCard = ({
   isRevealed,
   onAnswer,
   isGhostMode = false,
+  isAlreadyAnswered = false,
 }: ActiveQuestionCardProps) => {
   const [timeLeft, setTimeLeft] = useState(timeLimit);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null); // highlighted but not yet submitted
@@ -51,13 +53,8 @@ export const ActiveQuestionCard = ({
     setSubmitting(false);
     startTimeRef.current = Date.now();
 
-    // Client-side Option Shuffling (Anti-Peeking)
-    const indexed = options.map((opt, i) => ({ ...opt, originalIndex: i }));
-    for (let i = indexed.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [indexed[i], indexed[j]] = [indexed[j], indexed[i]];
-    }
-    setShuffledOptions(indexed);
+    // Options are now shuffled server-side via get_questions_for_student RPC
+    setShuffledOptions(options.map((opt, i) => ({ ...opt, originalIndex: i })) as any);
   }, [question, timeLimit, options]);
 
   // Countdown timer
@@ -92,19 +89,20 @@ export const ActiveQuestionCard = ({
     const reactionMs = Date.now() - startTimeRef.current;
 
     // Use originalIndex for submission so the backend/teacher knows which choice was really picked
-    const originalIdx = idx === -1 ? -1 : (shuffledOptions[idx]?.originalIndex ?? idx);
-    await onAnswer(originalIdx, reactionMs);
+    await onAnswer(idx, reactionMs); // Directly use idx as options are now server-shuffled
     setSubmitting(false);
   };
 
-  const currentSelectionOriginalIdx = selectedIndex !== null && selectedIndex >= 0
-    ? shuffledOptions[selectedIndex]?.originalIndex
+  const currentSelectionIdx = selectedIndex !== null && selectedIndex >= 0
+    ? selectedIndex
     : null;
 
+  // Determine if the selected answer was correct based on the 'is_selected_correct' flag from the server
   const didAnswerCorrectly =
-    hasSubmitted && currentSelectionOriginalIdx !== null && currentSelectionOriginalIdx >= 0
-      ? !!options[currentSelectionOriginalIdx]?.is_correct
+    isRevealed && selectedIndex !== null && selectedIndex >= 0
+      ? !!shuffledOptions[selectedIndex]?.is_correct
       : false;
+
   const showReveal = isRevealed && hasSubmitted;
   const isTrueFalse = questionType === 'true_false';
   const timeFraction = timeLeft / timeLimit;
@@ -184,6 +182,22 @@ export const ActiveQuestionCard = ({
                 {didAnswerCorrectly ? 'Correct!' : 'Incorrect!'}
               </h3>
               <p className="text-white/80">Waiting for next question...</p>
+            </motion.div>
+
+            /* LOCKED / ALREADY ANSWERED STATE */
+          ) : isAlreadyAnswered ? (
+             <motion.div
+              key="locked"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="rounded-[2rem] border-2 border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/50 dark:bg-indigo-500/5 p-10 text-center"
+            >
+              <div className="text-5xl mb-3">🔒</div>
+              <h3 className="text-2xl font-extrabold text-slate-900 dark:text-white mb-1">
+                Answer Locked
+              </h3>
+              <p className="text-slate-500 dark:text-slate-400">You have already submitted an answer for this question.</p>
             </motion.div>
 
             /* SUBMITTED — WAITING STATE */

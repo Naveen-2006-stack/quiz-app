@@ -19,6 +19,7 @@ type Participant = {
   id: string;
   display_name: string;
   score: number;
+  notes?: string;
 };
 
 type StudentResponse = {
@@ -39,6 +40,7 @@ type LeaderboardRow = {
   score: number;
   correctCount: number;
   totalQuestions: number;
+  notes?: string;
 };
 
 type QuestionStat = {
@@ -162,7 +164,7 @@ export default function SessionAnalyticsReportPage() {
       const [pRes, rRes, qRes] = await Promise.all([
         supabase
           .from("participants")
-          .select("id, display_name, score")
+          .select("id, display_name, score, notes")
           .eq("session_id", sessionId),
         supabase
           .from("student_responses")
@@ -206,6 +208,7 @@ export default function SessionAnalyticsReportPage() {
       score: p.score || 0,
       correctCount: correctByParticipant.get(p.id) || 0,
       totalQuestions: questions.length,
+      notes: p.notes || "",
     }));
   }, [participants, responses, questions.length]);
 
@@ -260,12 +263,13 @@ export default function SessionAnalyticsReportPage() {
   }, [questionStats]);
 
   const downloadCsv = () => {
-    const header = ["Rank", "Student Name", "Final Score", "Questions Correct"];
+    const header = ["Rank", "Student Name", "Final Score", "Questions Correct", "Notes"];
     const rows = leaderboard.map((row) => [
       row.rank,
       row.name,
       row.score,
       `${row.correctCount} / ${row.totalQuestions}`,
+      row.notes || "",
     ]);
 
     const csv = [header, ...rows]

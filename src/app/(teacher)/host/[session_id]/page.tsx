@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase/client";
 import { useLiveSession } from "@/hooks/useLiveSession";
 import { useGameStore } from "@/store/useGameStore";
 import { motion, AnimatePresence } from "framer-motion";
-import { Users, Play, Copy, Check, ArrowLeft, CheckSquare, LayoutDashboard, ShieldAlert, XCircle, Trash2 } from "lucide-react";
+import { Users, Play, Copy, Check, ArrowLeft, CheckSquare, LayoutDashboard, ShieldAlert, XCircle, Trash2, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface LiveSession {
@@ -20,7 +20,7 @@ interface LiveSession {
 interface FlaggedStudent {
   studentId: string;
   studentName: string;
-  strikes: number;
+  violations: number;
 }
 
 interface FloatingEmoji {
@@ -41,8 +41,15 @@ export default function HostRoom() {
   const [startingGame, setStartingGame] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [advancingQuestion, setAdvancingQuestion] = useState(false);
-  const [flaggedStudents, setFlaggedStudents] = useState<FlaggedStudent[]>([]);
   const [floatingEmojis, setFloatingEmojis] = useState<FloatingEmoji[]>([]);
+
+  // Answer Visibility Control
+  const [isAnswersHidden, setIsAnswersHidden] = useState(true);
+
+  // Violations Monitoring Modal
+  const [selectedViolationsParticipant, setSelectedViolationsParticipant] = useState<{ id: string, name: string } | null>(null);
+  const [violationsHistory, setViolationsHistory] = useState<any[]>([]);
+  const [loadingViolations, setLoadingViolations] = useState(false);
 
   // Live submission counter state
   const [submissionCount, setSubmissionCount] = useState(0);
@@ -85,13 +92,11 @@ export default function HostRoom() {
         const studentName = payload?.payload?.studentName as string | undefined;
         if (!studentId) return;
 
-        setFlaggedStudents((prev) => {
-          const existing = prev.find(f => f.studentId === studentId);
-          if (existing) {
-            return prev.map(f => f.studentId === studentId ? { ...f, strikes: f.strikes + 1 } : f);
-          }
-          return [...prev, { studentId, studentName: studentName || "Unknown", strikes: 1 }];
-        });
+        // Update the participant's violation count in Zustand local state immediately for real-time display
+        // The DB is also updated via the log_violation RPC, but this handles the live broadcast
+        setParticipants(Object.values(participantsMap).map(p => 
+          p.id === studentId ? { ...p, cheat_flags: (p.cheat_flags || 0) + 1 } : p
+        ));
       })
       .on("broadcast", { event: "emoji_reaction" }, (payload: any) => {
         const emoji = payload?.payload?.emoji as string | undefined;
@@ -115,6 +120,7 @@ export default function HostRoom() {
   // Reset counter when question index changes.
   useEffect(() => {
     setSubmissionCount(0); // reset on every question change
+    setIsAnswersHidden(true); // Always hide answers when starting a new question
   }, [currentQuestionIndex]);
 
   useEffect(() => {
@@ -162,9 +168,12 @@ export default function HostRoom() {
     // SECURITY: explicit column list ─ ghost_mode is NEVER included here
     const { data: pData } = await supabase
       .from("participants")
-      .select("id, session_id, device_uuid, display_name, score, streak, cheat_flags, last_active, joined_at")
+      .select("id, session_id, device_uuid, display_name, score, streak, cheat_flags, last_active, joined_at, is_banned")
       .eq("session_id", sessionId);
-    if (pData) setParticipants(pData);
+    if (pData) {
+      const activeParticipants = pData.filter(p => !p.is_banned);
+      setParticipants(activeParticipants);
+    }
   };
 
   const copyPin = () => {
@@ -229,23 +238,27 @@ export default function HostRoom() {
   const kickParticipant = async (pId: string) => {
     if (!sessionId || !controlChannelRef.current) return;
 
-    // 1. Delete from Supabase
-    const { error } = await supabase.from("participants").delete().eq("id", pId).eq("session_id", sessionId);
-    if (error) {
-      console.error("Failed to kick participant:", error.message);
-      return;
+    try {
+      // 1. Secure Ban in Database
+      const { error } = await supabase.rpc("ban_participant", {
+        p_session_id: sessionId,
+        p_participant_id: pId
+      });
+      
+      if (error) throw error;
+
+      // 2. Broadcast kick event
+      await controlChannelRef.current.send({
+        type: "broadcast",
+        event: "kick_player",
+        payload: { targetId: pId },
+      });
+
+      // 3. Local state update
+      setParticipants(Object.values(participantsMap).filter(p => p.id !== pId));
+    } catch (err: any) {
+      console.error("Failed to kick participant:", err.message);
     }
-
-    // 2. Broadcast kick event
-    await controlChannelRef.current.send({
-      type: "broadcast",
-      event: "kick_player",
-      payload: { targetId: pId },
-    });
-
-    // 3. Local state update
-    setParticipants(Object.values(participantsMap).filter(p => p.id !== pId));
-    setFlaggedStudents(prev => prev.filter(f => f.studentId !== pId));
   };
 
   // ── Feature 4: Back to Dashboard (clears game state) ──
@@ -256,6 +269,25 @@ export default function HostRoom() {
 
   const handleViewReport = () => {
     router.push(`/dashboard/reports/${sessionId}`);
+  };
+
+  const handleOpenViolations = async (pId: string, pName: string) => {
+    setSelectedViolationsParticipant({ id: pId, name: pName });
+    setLoadingViolations(true);
+    setViolationsHistory([]);
+    try {
+      const { data } = await supabase
+        .from("participant_violations")
+        .select("*")
+        .eq("participant_id", pId)
+        .eq("session_id", sessionId)
+        .order("created_at", { ascending: false });
+      if (data) setViolationsHistory(data);
+    } catch (err) {
+      console.error("Failed to load violations:", err);
+    } finally {
+      setLoadingViolations(false);
+    }
   };
 
   const participantsList = Object.values(participantsMap);
@@ -287,38 +319,6 @@ export default function HostRoom() {
           </AnimatePresence>
         </div>
 
-        {/* Security Flags */}
-        {flaggedStudents.length > 0 && (
-          <div className="mb-6 rounded-2xl border border-rose-300 bg-rose-50 p-6 dark:border-rose-500/30 dark:bg-rose-500/10 shadow-lg shadow-rose-500/10">
-            <div className="flex items-center gap-2 mb-4">
-              <ShieldAlert className="text-rose-600 dark:text-rose-400" size={20} />
-              <h3 className="text-sm font-extrabold uppercase tracking-widest text-rose-700 dark:text-rose-300">Active Violations (Strikes)</h3>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {flaggedStudents.map((f) => {
-                const strikeColor = f.strikes >= 3 ? "bg-rose-600 text-white" : f.strikes === 2 ? "bg-orange-500 text-white" : "bg-amber-400 text-white";
-                return (
-                  <div key={f.studentId} className="flex items-center justify-between bg-white dark:bg-slate-900 border border-rose-100 dark:border-rose-500/20 p-3 rounded-xl">
-                    <div className="flex items-center gap-3">
-                      <span className={cn("px-2 py-0.5 rounded-lg text-xs font-black", strikeColor)}>
-                        {f.strikes} {f.strikes === 1 ? 'STRIKE' : 'STRIKES'}
-                      </span>
-                      <span className="font-bold text-slate-800 dark:text-slate-200">{f.studentName}</span>
-                    </div>
-                    <button
-                      onClick={() => kickParticipant(f.studentId)}
-                      className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors group"
-                      title="Kick Player"
-                    >
-                      <XCircle size={18} className="group-hover:scale-110 transition-transform" />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
         {/* Active Question Panel */}
         {sessionStatus === "active" && activeQ && (
           <div className="mb-10 bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] shadow-xl border border-indigo-50 dark:border-white/5">
@@ -340,17 +340,32 @@ export default function HostRoom() {
               <span className="text-slate-500 font-medium font-mono">{activeQ.time_limit}s</span>
             </div>
 
-            <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white mb-8 leading-tight">
-              {activeQ.question_text}
-            </h2>
+            <div className="flex justify-between items-start gap-4 mb-8">
+              <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white leading-tight flex-1">
+                {activeQ.question_text}
+              </h2>
+              <button 
+                onClick={() => setIsAnswersHidden(!isAnswersHidden)}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border transition-all whitespace-nowrap",
+                  isAnswersHidden 
+                    ? "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600" 
+                    : "bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-400 dark:border-emerald-500/30"
+                )}
+                title={isAnswersHidden ? "Show correct answers on screen" : "Hide answers from screen"}
+              >
+                {isAnswersHidden ? <EyeOff size={18} /> : <Eye size={18} />}
+                {isAnswersHidden ? "Answers Hidden" : "Answers Visible"}
+              </button>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {activeQ.options.map((opt: any, idx: number) => (
                 <div
                   key={idx}
                   className={cn(
-                    "p-5 text-lg font-semibold rounded-2xl border-2",
-                    opt.is_correct
+                    "p-5 text-lg font-semibold rounded-2xl border-2 transition-all",
+                    !isAnswersHidden && opt.is_correct
                       ? "bg-emerald-50 border-emerald-500 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
                       : "bg-gray-50 border-transparent dark:bg-slate-900 dark:text-slate-300"
                   )}
@@ -426,23 +441,36 @@ export default function HostRoom() {
                   "w-10 h-10 flex items-center justify-center rounded-xl text-lg font-black",
                   idx === 0 ? "bg-amber-400 text-white" : idx === 1 ? "bg-slate-300 dark:bg-slate-600 text-slate-700 dark:text-white" : idx === 2 ? "bg-orange-400 text-white" : "bg-gray-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
                 )}>#{idx + 1}</div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-xl font-bold text-slate-900 dark:text-white">{p.display_name}</h3>
-                    {p.cheat_flags > 0 && (
-                      <span className="bg-rose-100 text-rose-600 text-xs font-bold px-2 py-0.5 rounded-md">⚠️ {p.cheat_flags} flag{p.cheat_flags > 1 ? "s" : ""}</span>
-                    )}
-                  </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white truncate">{p.display_name}</h3>
                   {p.streak > 0 && <div className="text-xs font-semibold text-amber-500 mt-0.5">🔥 {p.streak} streak</div>}
                 </div>
-                <div className="text-3xl font-black tabular-nums text-indigo-600 dark:text-indigo-400">
+                {/* Violations column — always visible, clickable if any exist */}
+                <div className="flex flex-col items-center gap-0.5 min-w-[64px]">
+                  <button
+                    onClick={() => handleOpenViolations(p.id, p.display_name || "Unknown")}
+                    className={cn(
+                      "flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black transition-colors",
+                      (p.cheat_flags || 0) > 0
+                        ? (p.cheat_flags >= 3 ? "bg-rose-600 text-white hover:bg-rose-700" : p.cheat_flags >= 2 ? "bg-orange-500 text-white hover:bg-orange-600" : "bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-500/20 dark:text-amber-400")
+                        : "bg-slate-100 text-slate-400 dark:bg-slate-700/50 cursor-default"
+                    )}
+                    title={(p.cheat_flags || 0) > 0 ? "Click to view violation history" : "No violations"}
+                    disabled={!(p.cheat_flags > 0)}
+                  >
+                    <ShieldAlert size={12} />
+                    {p.cheat_flags || 0}
+                  </button>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wide">violations</span>
+                </div>
+                <div className="text-3xl font-black tabular-nums text-indigo-600 dark:text-indigo-400 min-w-[80px] text-right">
                   {p.score.toLocaleString()}
                 </div>
                 {sessionStatus === "active" && (
                   <button
                     onClick={() => kickParticipant(p.id)}
                     className="ml-2 p-2.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-all opacity-0 group-hover:opacity-100"
-                    title="Kick Student"
+                    title="Ban Student"
                   >
                     <Trash2 size={20} />
                   </button>
@@ -451,6 +479,82 @@ export default function HostRoom() {
             ))}
           </AnimatePresence>
         </div>
+
+        {/* Violations History Modal */}
+        <AnimatePresence>
+          {selectedViolationsParticipant && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+            >
+              <motion.div
+                initial={{ scale: 0.95, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 20 }}
+                className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-rose-100 dark:border-rose-500/20 overflow-hidden"
+              >
+                <div className="bg-rose-50 dark:bg-rose-500/10 px-6 py-4 border-b border-rose-100 dark:border-rose-500/20 flex justify-between items-center">
+                  <div className="flex items-center gap-3">
+                    <ShieldAlert className="text-rose-600 dark:text-rose-400" size={24} />
+                    <h3 className="font-extrabold text-xl text-rose-900 dark:text-rose-300">
+                      Violations History
+                    </h3>
+                  </div>
+                  <button 
+                    onClick={() => setSelectedViolationsParticipant(null)} 
+                    className="p-2 text-rose-400 hover:text-rose-600 bg-rose-100/50 hover:bg-rose-200/50 dark:bg-rose-500/20 rounded-full transition-colors"
+                  >
+                    <XCircle size={20} />
+                  </button>
+                </div>
+                
+                <div className="p-6">
+                  <p className="font-medium text-slate-700 dark:text-slate-300 mb-6">
+                    Showing recorded strikes for <strong className="text-slate-900 dark:text-white">{selectedViolationsParticipant.name}</strong>
+                  </p>
+
+                  <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+                    {loadingViolations ? (
+                      <div className="flex justify-center p-8">
+                        <div className="w-8 h-8 rounded-full border-4 border-dashed border-rose-300 animate-spin" />
+                      </div>
+                    ) : violationsHistory.length === 0 ? (
+                      <div className="text-center p-8 text-slate-500 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
+                        No detailed violation logs found. (May be older strikes).
+                      </div>
+                    ) : (
+                      violationsHistory.map((v, i) => (
+                        <div key={v.id} className="flex items-start gap-4 p-4 rounded-xl border border-rose-100 dark:border-rose-500/20 bg-white dark:bg-slate-800 shadow-sm relative overflow-hidden">
+                          <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-rose-500" />
+                          <div className="w-8 h-8 rounded-full bg-rose-100 dark:bg-rose-500/20 flex items-center justify-center text-rose-600 dark:text-rose-400 font-black shrink-0">
+                            {violationsHistory.length - i}
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-bold text-slate-800 dark:text-slate-200">{v.violation_type}</h4>
+                            <p className="text-xs font-semibold text-slate-400 mt-1 uppercase tracking-wider">
+                              {new Date(v.created_at).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="mt-8 flex justify-end">
+                    <button
+                      onClick={() => kickParticipant(selectedViolationsParticipant.id)}
+                      className="flex items-center gap-2 px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-lg shadow-rose-600/30 transition-all"
+                    >
+                      <Trash2 size={18} /> Ban Player Now
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }

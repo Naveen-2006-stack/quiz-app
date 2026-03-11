@@ -7,7 +7,17 @@ import { useLiveSession } from "@/hooks/useLiveSession";
 import { useGameStore } from "@/store/useGameStore";
 import { ActiveQuestionCard } from "@/components/game/ActiveQuestionCard";
 import { motion, AnimatePresence } from "framer-motion";
-import { LayoutDashboard, ArrowLeft } from "lucide-react";
+import { LayoutDashboard, ArrowLeft, NotebookPen, X, Save } from "lucide-react";
+
+// For debouncing notes
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  return debouncedValue;
+}
 
 interface FloatingEmoji {
   id: string;
@@ -40,44 +50,113 @@ export default function StudentPlayRoom() {
   const reactionChannelRef = useRef<any>(null);
   // Ghost Mode: fetched from the user's OWN profile — never exposed to host or peers
   const [isGhostMode, setIsGhostMode] = useState(false);
+  // Notes & Multi-submission
+  const [answeredQuestions, setAnsweredQuestions] = useState<Set<string>>(new Set());
+  const [notes, setNotes] = useState("");
+  const [isNotesOpen, setIsNotesOpen] = useState(false);
+  const [savingNotes, setSavingNotes] = useState(false);
+  const debouncedNotes = useDebounce(notes, 1000);
+
   // Universal emoji floats — same logic as Host screen
   const [floatingEmojis, setFloatingEmojis] = useState<FloatingEmoji[]>([]);
 
   useLiveSession(sessionId, "student");
+
+  // Auto-save notes
+  useEffect(() => {
+    if (!participantId || !sessionId) return;
+    const saveNotes = async () => {
+      setSavingNotes(true);
+      await supabase.rpc("update_participant_notes", {
+        p_session_id: sessionId,
+        p_participant_id: participantId,
+        p_notes: debouncedNotes
+      });
+      setSavingNotes(false);
+    };
+    saveNotes();
+  }, [debouncedNotes, participantId, sessionId]);
 
   // Init room data
   useEffect(() => {
     initPlayRoom();
   }, [sessionId]);
 
-  // Anti-cheat: tab switch detection (Hardened for Mobile Browsers)
+  // Anti-cheat: tab switch and page leave detection
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || !participantId || sessionStatus !== "active") return;
 
+    let strikeCooldown = false;
     const gameRoomChannel = supabase.channel(`game-room:${sessionId}`).subscribe();
 
-    const onVisibilityChange = async () => {
-      // If document is hidden OR window lost focus, it's a cheat violation
-      if (!document.hidden && document.hasFocus()) return;
-      if (!participantId) return;
+    const triggerStrike = async (type: string) => {
+      if (strikeCooldown) return;
+      strikeCooldown = true;
+      setTimeout(() => { strikeCooldown = false; }, 3000); // 3-second debounce to prevent spam
 
       await gameRoomChannel.send({
         type: "broadcast",
         event: "anti_cheat_violation",
         payload: { studentName: participantName, studentId: participantId },
       });
-      await supabase.rpc("increment_cheat_flags", { p_id: participantId });
+      await supabase.rpc("log_violation", {
+        p_session_id: sessionId,
+        p_participant_id: participantId,
+        p_violation_type: type
+      });
+    };
+
+    const onVisibilityChange = () => {
+      if (document.hidden) triggerStrike("Tab Switch / Minimized");
+    };
+
+    const onPageLeave = () => {
+      triggerStrike("Page Refresh / Leave");
+    };
+
+    // Detect when cursor moves out of the browser window
+    const onMouseLeave = (e: MouseEvent) => {
+      // Only trigger if the cursor truly left the page (not just moved to another element)
+      if (e.clientY <= 0 || e.clientX <= 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight) {
+        triggerStrike("Cursor Left Page");
+      }
+    };
+
+    // Block right-click context menu
+    const onContextMenu = (e: Event) => {
+      e.preventDefault();
+      triggerStrike("Right-Click Context Menu");
+    };
+
+    // Block common cheat shortcuts (Ctrl+C, Ctrl+U, F12, Ctrl+Shift+I/J/C)
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (
+        (e.ctrlKey && ['u', 's'].includes(e.key.toLowerCase())) ||
+        e.key === 'F12' ||
+        (e.ctrlKey && e.shiftKey && ['i', 'j', 'c'].includes(e.key.toLowerCase()))
+      ) {
+        e.preventDefault();
+        triggerStrike("Blocked Shortcut: " + e.key);
+      }
     };
 
     document.addEventListener("visibilitychange", onVisibilityChange);
-    window.addEventListener("blur", onVisibilityChange);
+    window.addEventListener("pagehide", onPageLeave);
+    window.addEventListener("beforeunload", onPageLeave);
+    document.addEventListener("mouseleave", onMouseLeave);
+    document.addEventListener("contextmenu", onContextMenu);
+    document.addEventListener("keydown", onKeyDown);
 
     return () => {
       document.removeEventListener("visibilitychange", onVisibilityChange);
-      window.removeEventListener("blur", onVisibilityChange);
+      window.removeEventListener("pagehide", onPageLeave);
+      window.removeEventListener("beforeunload", onPageLeave);
+      document.removeEventListener("mouseleave", onMouseLeave);
+      document.removeEventListener("contextmenu", onContextMenu);
+      document.removeEventListener("keydown", onKeyDown);
       void supabase.removeChannel(gameRoomChannel);
     };
-  }, [sessionId, participantId, participantName]);
+  }, [sessionId, participantId, participantName, sessionStatus]);
 
   // ── Emoji reactions: send + receive on the SAME game-room channel as the host ──
   // Previously the student used a separate 'emoji-room' channel which meant
@@ -179,13 +258,31 @@ export default function StudentPlayRoom() {
       setCurrentQuestionIndex(sData.current_question_index ?? 0);
     }
 
-    if (sData?.quiz_id) {
-      const { data: qData } = await supabase
-        .from("questions")
-        .select("*")
-        .eq("quiz_id", sData.quiz_id)
-        .order("order_index");
-      if (qData) setQuestions(qData);
+    if (sData?.id) {
+      // Try the secure RPC first. If not deployed yet, fall back to direct fetch.
+      const { data: qData, error: qError } = await supabase.rpc("get_questions_for_student", {
+        p_session_id: sessionId
+      });
+
+      if (qData && qData.length > 0) {
+        setQuestions(qData);
+      } else {
+        // Fallback: fetch from the questions table directly
+        if (qError) console.warn("RPC not available, falling back to direct query:", qError.message);
+        const { data: fallbackQData } = await supabase
+          .from("questions")
+          .select("id, question_text, question_type, time_limit, options, order_index")
+          .eq("quiz_id", sData.quiz_id)
+          .order("order_index", { ascending: true });
+        if (fallbackQData) {
+          // SECURITY: strip is_correct from options to prevent cheating via DevTools
+          const sanitized = fallbackQData.map((q: any) => ({
+            ...q,
+            options: (q.options as any[]).map(({ text }: any) => ({ text }))
+          }));
+          setQuestions(sanitized);
+        }
+      }
     }
 
     const { data: pData } = await supabase
@@ -200,17 +297,33 @@ export default function StudentPlayRoom() {
       setParticipantName(pData.display_name || "Student");
       setStreak(pData.streak || 0);
 
-      // ── Ghost Mode: Check using the secure RPC ──
-      // This works for ALL players securely using their device_uuid,
-      // avoiding the fragility of auth.getSession() for guest players.
+      // Fetch answered questions and notes
+      const [respData, notesData] = await Promise.all([
+        supabase.from("student_responses").select("question_id").eq("participant_id", pData.id),
+        supabase.from("participants").select("notes").eq("id", pData.id).single()
+      ]);
+      
+      if (respData.data) {
+        setAnsweredQuestions(new Set(respData.data.map((r: any) => r.question_id)));
+      }
+      if (notesData.data?.notes) {
+        setNotes(notesData.data.notes);
+      }
+
       try {
         const { data: isGhost } = await supabase.rpc("get_ghost_mode_for_participant", {
           p_session_id: sessionId,
           p_device_uuid: uuid
         });
         setIsGhostMode(!!isGhost);
+
+        // Also check if banned
+        const { data: pCheck } = await supabase.from("participants").select("is_banned").eq("id", pData.id).single();
+        if (pCheck?.is_banned) {
+          router.push("/dashboard?error=banned");
+        }
       } catch (err) {
-        console.error("Ghost mode check failed:", err);
+        console.error("Initialization checks failed:", err);
       }
     } else {
       router.push("/join");
@@ -220,8 +333,6 @@ export default function StudentPlayRoom() {
     setLoading(false);
   };
 
-  // ── Feature 2: Two-step submission ──
-  // This now receives the FINAL confirmed answer from ActiveQuestionCard
   const handleAnswerSubmit = async (optionIdx: number, reactionMs: number) => {
     if (!participantId || !questions.length) return;
 
@@ -229,46 +340,56 @@ export default function StudentPlayRoom() {
     if (!q) return;
 
     const selectedOpt = q.options[optionIdx];
-    const isCorrect = optionIdx >= 0 ? (selectedOpt?.is_correct ?? false) : false;
+    const optionText = selectedOpt?.text || "";
 
-    const maxTime = q.time_limit * 1000;
-    const isTimerEnabled = sessionInfo?.quizzes?.timer_based_marking !== false;
-    const timeRatio = isTimerEnabled ? (Math.max(0, maxTime - reactionMs) / maxTime) : 1;
-
-    let pointsAwarded = isCorrect
-      ? Math.round(q.base_points * 0.5 + q.base_points * 0.5 * timeRatio)
-      : 0;
-
-    const newStreak = isCorrect ? streak + 1 : 0;
-    const streakBonus = newStreak >= 3 ? Math.min(300, newStreak * 50) : 0;
-    pointsAwarded += streakBonus;
-
-    // Optimistic streak update so UI feels instant
-    setStreak(newStreak);
-
-    // Record response
-    await supabase.from("student_responses").insert({
-      session_id: sessionId,
-      participant_id: participantId,
-      question_id: q.id,
-      reaction_time_ms: reactionMs,
-      is_correct: isCorrect,
-      points_awarded: pointsAwarded,
-      streak_bonus: streakBonus,
+    // ── Try Secure Submission v2 RPC first ──
+    const { data, error } = await supabase.rpc("submit_answer_v2", {
+      p_session_id: sessionId,
+      p_participant_id: participantId,
+      p_question_id: q.id,
+      p_option_index: optionIdx,
+      p_option_text: optionText,
+      p_reaction_time_ms: reactionMs
     });
 
-    // Atomic score + streak update
-    const { data: pRead } = await supabase
-      .from("participants")
-      .select("score")
-      .eq("id", participantId)
-      .single();
+    if (error) {
+      if (error.message.includes("banned")) { router.push("/dashboard?error=banned"); return; }
+      
+      // ── Fallback: RPC not deployed, use direct DB writes ──
+      if (error.message.includes("Could not find the function")) {
+        console.warn("submit_answer_v2 RPC not found, using fallback submission.");
+        const isCorrect = !!(selectedOpt?.is_correct);
+        const points = isCorrect ? 1000 : 0;
 
-    if (pRead) {
-      await supabase
-        .from("participants")
-        .update({ score: pRead.score + pointsAwarded, streak: newStreak })
-        .eq("id", participantId);
+        // Record the response (ignore conflict = duplicate submission)
+        await supabase.from("student_responses").upsert({
+          session_id: sessionId,
+          participant_id: participantId,
+          question_id: q.id,
+          is_correct: isCorrect,
+          points_awarded: points,
+          reaction_time_ms: reactionMs,
+        }, { onConflict: "session_id,participant_id,question_id", ignoreDuplicates: true });
+
+        // Award points if correct
+        if (isCorrect) {
+          const { data: pData } = await supabase.from("participants").select("score").eq("id", participantId).single();
+          if (pData != null) {
+            await supabase.from("participants").update({ score: (pData.score || 0) + points }).eq("id", participantId);
+          }
+        }
+
+        setAnsweredQuestions(prev => new Set(prev).add(q.id));
+        return;
+      }
+
+      console.error("Submission failed:", error.message);
+      return;
+    }
+
+    if (data) {
+      setStreak(data.new_streak);
+      setAnsweredQuestions(prev => new Set(prev).add(q.id));
     }
   };
 
@@ -427,6 +548,7 @@ export default function StudentPlayRoom() {
             isRevealed={revealedQuestionIndex === currentQuestionIndex}
             onAnswer={handleAnswerSubmit}
             isGhostMode={isGhostMode}
+            isAlreadyAnswered={answeredQuestions.has(questions[currentQuestionIndex].id)}
           />
         )}
 
@@ -454,6 +576,53 @@ export default function StudentPlayRoom() {
           </motion.div>
         )}
       </main>
+
+      {/* Floating Notes Toggle Component */}
+      {(sessionStatus === "active" || sessionStatus === "waiting") && (
+        <div className="fixed bottom-6 right-6 z-[100] flex flex-col items-end">
+          <AnimatePresence>
+            {isNotesOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="mb-4 w-80 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-indigo-100 dark:border-indigo-500/20 overflow-hidden"
+              >
+                <div className="bg-indigo-50 dark:bg-indigo-900/40 px-4 py-3 border-b border-indigo-100 dark:border-indigo-500/20 flex justify-between items-center">
+                  <h3 className="font-bold text-indigo-900 dark:text-indigo-200 flex items-center gap-2">
+                    <NotebookPen size={16} /> My Notes
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    {savingNotes && <Save size={14} className="text-indigo-400 animate-pulse" />}
+                    <button onClick={() => setIsNotesOpen(false)} className="text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300">
+                      <X size={18} />
+                    </button>
+                  </div>
+                </div>
+                <div className="p-4">
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    disabled={sessionStatus !== "waiting"}
+                    placeholder={sessionStatus === "waiting" ? "Write your note before the quiz starts..." : "Notes are locked during the quiz."}
+                    className="w-full h-32 bg-transparent resize-none focus:outline-none text-sm text-slate-700 dark:text-slate-300 placeholder-slate-400 disabled:opacity-60 disabled:cursor-not-allowed"
+                  />
+                  {sessionStatus !== "waiting" && (
+                    <p className="mt-2 text-xs text-indigo-500 dark:text-indigo-400 font-medium">Notes are read-only during the quiz.</p>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <button
+            onClick={() => setIsNotesOpen(!isNotesOpen)}
+            className="w-14 h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-lg shadow-indigo-600/30 flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
+          >
+            <NotebookPen size={24} />
+          </button>
+        </div>
+      )}
+
     </div>
   );
 }

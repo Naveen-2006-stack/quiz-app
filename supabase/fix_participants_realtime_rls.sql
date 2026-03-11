@@ -37,6 +37,6 @@ BEGIN
     CREATE POLICY "Anyone can join a game" 
     ON participants 
     FOR INSERT 
-    WITH CHECK (true);
+    WITH CHECK (session_id IN (SELECT id FROM live_sessions));
   END IF;
 END $$;

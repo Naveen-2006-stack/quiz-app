@@ -67,10 +67,10 @@ CREATE POLICY "Anyone can read participants" ON participants
   FOR SELECT USING (true);
 
 CREATE POLICY "Anyone can insert participants" ON participants
-  FOR INSERT WITH CHECK (true);
+  FOR INSERT WITH CHECK (session_id IN (SELECT id FROM live_sessions));
 
 CREATE POLICY "Anyone can update participants (anti-cheat/score)" ON participants
-  FOR UPDATE USING (true);
+  FOR UPDATE USING (session_id IN (SELECT id FROM live_sessions));
 
 -- 5. Student Responses
 CREATE POLICY "Admins can do everything on student_responses" ON student_responses

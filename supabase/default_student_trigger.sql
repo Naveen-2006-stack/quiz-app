@@ -13,7 +13,7 @@ BEGIN
   ON CONFLICT (id) DO NOTHING;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = '';
 
 -- 2. Create the trigger on auth.users
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
