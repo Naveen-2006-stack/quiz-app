@@ -365,6 +365,16 @@ export default function StudentPlayRoom() {
         });
         setIsGhostMode(!!isGhost);
 
+        // Ghost mode: re-fetch questions with is_correct so the star indicator works
+        if (isGhost && sData?.quiz_id) {
+          const { data: ghostQData } = await supabase
+            .from("questions")
+            .select("id, question_text, question_type, time_limit, options, order_index")
+            .eq("quiz_id", sData.quiz_id)
+            .order("order_index", { ascending: true });
+          if (ghostQData) setQuestions(ghostQData);
+        }
+
         // Also check if banned
         const { data: pCheck } = await supabase.from("participants").select("is_banned").eq("id", pData.id).single();
         if (pCheck?.is_banned) {

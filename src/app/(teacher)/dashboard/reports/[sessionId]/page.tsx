@@ -402,6 +402,7 @@ export default function SessionAnalyticsReportPage() {
                   <th className="px-3 py-3">Student Name</th>
                   <th className="px-3 py-3">Final Score</th>
                   <th className="px-3 py-3">Questions Correct</th>
+                  <th className="px-3 py-3">Violations</th>
                 </tr>
               </thead>
               <tbody>
@@ -413,11 +414,26 @@ export default function SessionAnalyticsReportPage() {
                     <td className="px-3 py-3 text-slate-300">
                       {row.correctCount} / {row.totalQuestions}
                     </td>
+                    <td className="px-3 py-3">
+                      {row.cheatCount > 0 ? (
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${
+                          row.cheatCount >= 3
+                            ? "bg-rose-500/20 text-rose-400"
+                            : row.cheatCount >= 2
+                            ? "bg-orange-500/20 text-orange-400"
+                            : "bg-amber-500/20 text-amber-400"
+                        }`}>
+                          ⚠ {row.cheatCount}
+                        </span>
+                      ) : (
+                        <span className="text-slate-600 text-xs">—</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {leaderboard.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-3 py-8 text-center text-slate-400">
+                    <td colSpan={5} className="px-3 py-8 text-center text-slate-400">
                       No leaderboard data available.
                     </td>
                   </tr>
