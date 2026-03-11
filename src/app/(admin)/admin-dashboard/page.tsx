@@ -94,13 +94,31 @@ export default function AdminDashboard() {
     
     // 4. Fetch Feedback
     const { data: feedbacks } = await supabase
-      .from("course_feedback")
-      .select("id, user_id, rating, content, created_at, profiles(display_name)")
+      .from("feedback")
+      .select("id, user_id, rating, message, created_at")
       .order("created_at", { ascending: false })
       .limit(50);
       
     if (feedbacks) {
-      setFeedbackList(feedbacks);
+      // Fetch names for these users
+      const uIds = Array.from(new Set(feedbacks.map(f => f.user_id).filter(Boolean))) as string[];
+      const uMap = new Map<string, string>();
+      
+      if (uIds.length > 0) {
+        const { data: fProfiles } = await supabase
+          .from("profiles")
+          .select("id, display_name")
+          .in("id", uIds);
+        
+        fProfiles?.forEach(p => uMap.set(p.id, p.display_name || "Unknown"));
+      }
+
+      const mappedFeedbacks = feedbacks.map(f => ({
+        ...f,
+        display_name: f.user_id ? (uMap.get(f.user_id) || "Unknown User") : "Anonymous"
+      }));
+      
+      setFeedbackList(mappedFeedbacks);
     }
     
     setLoading(false);
@@ -121,7 +139,7 @@ export default function AdminDashboard() {
   
   const deleteFeedback = async (id: string) => {
     if (!confirm("Delete this feedback?")) return;
-    await supabase.from("course_feedback").delete().eq("id", id);
+    await supabase.from("feedback").delete().eq("id", id);
     setFeedbackList(prev => prev.filter(f => f.id !== id));
   };
 
@@ -358,7 +376,8 @@ export default function AdminDashboard() {
                   {feedbackList.map((f) => (
                     <tr key={f.id} className="hover:bg-slate-800/70 transition-colors group">
                       <td className="px-6 py-4">
-                        <div className="font-semibold text-slate-100">{f.profiles?.display_name || "Unknown"}</div>
+                        <div className="font-semibold text-slate-100">{f.display_name}</div>
+                        <div className="text-[10px] text-slate-500 font-mono mt-0.5">{f.id.slice(0, 8)}...</div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-1 text-amber-500 font-bold">
@@ -366,7 +385,7 @@ export default function AdminDashboard() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-slate-300 text-sm">
-                        <p className="line-clamp-3">{f.content}</p>
+                        <p className="line-clamp-3">{f.message}</p>
                       </td>
                       <td className="px-6 py-4 text-slate-400 text-sm">
                         {new Date(f.created_at).toLocaleDateString()}
