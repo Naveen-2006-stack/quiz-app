@@ -134,10 +134,10 @@ export const ActiveQuestionCard = ({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
-      className="w-full max-w-2xl mx-auto rounded-[2.5rem] overflow-hidden bg-white shadow-2xl shadow-indigo-900/10 border border-indigo-50/50 dark:bg-slate-800 dark:shadow-none dark:border-white/5"
+      className="w-full max-w-2xl mx-auto rounded-[2.5rem] overflow-hidden bg-white/80 dark:bg-slate-900/60 backdrop-blur-2xl shadow-2xl shadow-indigo-900/10 border border-white/50 dark:border-white/10"
     >
       {/* Progress bar */}
-      <div className="h-1.5 bg-gray-100 dark:bg-slate-700">
+      <div className="h-1.5 bg-gray-100/50 dark:bg-slate-700/50 backdrop-blur-md">
         <motion.div
           className={cn('h-full transition-colors duration-300', timerColor)}
           animate={{ width: `${timeFraction * 100}%` }}
