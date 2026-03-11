@@ -247,17 +247,15 @@ export const ActiveQuestionCard = ({
               <div className={cn('mb-5', isTrueFalse ? 'grid grid-cols-1 sm:grid-cols-2 gap-4' : 'grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-4')}>
                 {shuffledOptions.map((opt, idx) => {
                   const isGhostReveal = isGhostMode && opt.is_correct;
-                  
-                  // In ghost mode, the correct answer uses the "emerald" color set.
-                  // Otherwise, normal colors apply.
-                  const color = isGhostReveal
-                    ? { bg: 'bg-emerald-500', hover: 'hover:bg-emerald-600', border: 'border-emerald-400', text: 'text-white', label: 'bg-emerald-600' }
-                    : isTrueFalse
-                      ? (opt.text.toLowerCase() === 'false'
-                        ? { bg: 'bg-rose-500', hover: 'hover:bg-rose-600', border: 'border-rose-400', text: 'text-white', label: 'bg-rose-600' }
-                        : { bg: 'bg-blue-500', hover: 'hover:bg-blue-600', border: 'border-blue-400', text: 'text-white', label: 'bg-blue-600' })
-                      : OPTION_COLORS[idx % OPTION_COLORS.length];
-                  
+
+                  // Normal color logic — ghost mode never overrides the button color.
+                  // (Doing so was causing the backend-confirmed correctness to appear wrong.)
+                  const color = isTrueFalse
+                    ? (opt.text.toLowerCase() === 'false'
+                      ? { bg: 'bg-rose-500', hover: 'hover:bg-rose-600', border: 'border-rose-400', text: 'text-white', label: 'bg-rose-600' }
+                      : { bg: 'bg-blue-500', hover: 'hover:bg-blue-600', border: 'border-blue-400', text: 'text-white', label: 'bg-blue-600' })
+                    : OPTION_COLORS[idx % OPTION_COLORS.length];
+
                   const isSelected = selectedIndex === idx;
 
                   return (
@@ -272,8 +270,7 @@ export const ActiveQuestionCard = ({
                         color.bg, color.hover, color.text,
                         isSelected
                           ? `${color.border} ring-4 ring-white/40 scale-[1.02] shadow-xl`
-                          : 'border-transparent opacity-70 hover:opacity-100',
-                        isGhostReveal ? 'shadow-[0_0_20px_rgba(16,185,129,0.5)] border-emerald-400' : ''
+                          : 'border-transparent opacity-70 hover:opacity-100'
                       )}
                     >
                       <span className="flex items-center gap-4">
@@ -290,13 +287,14 @@ export const ActiveQuestionCard = ({
                         )}
                       </span>
 
-                      {/* GHOST MODE VIP TELL */}
+                      {/* GHOST MODE: star icon pinned to top-right corner */}
                       {isGhostReveal && (
                         <div
                           aria-hidden="true"
-                          className="absolute bottom-2 right-2 text-sm pointer-events-none drop-shadow-md opacity-80"
+                          className="absolute top-2 right-3 text-base pointer-events-none drop-shadow-md"
+                          title="Ghost: correct answer"
                         >
-                          ✨
+                          ⭐
                         </div>
                       )}
                     </motion.button>

@@ -114,7 +114,26 @@ export default function StudentPlayRoom() {
     };
 
     const onPageLeave = () => {
-      triggerStrike("Page Refresh / Leave");
+      // sendBeacon is guaranteed to fire even when the page is closing/reloading.
+      // The regular async triggerStrike won't complete in time on unload.
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      if (!supabaseUrl || !supabaseKey || !participantId || !sessionId) return;
+      
+      const body = JSON.stringify({
+        p_session_id: sessionId,
+        p_participant_id: participantId,
+        p_violation_type: "Page Refresh / Leave",
+      });
+      
+      navigator.sendBeacon(
+        `${supabaseUrl}/rest/v1/rpc/log_violation?apikey=${supabaseKey}`,
+        new Blob([body], {
+          type: "application/json",
+        })
+      );
+      // Also attempt the broadcast (best-effort on unload)
+      void triggerStrike("Page Refresh / Leave");
     };
 
     // Detect when cursor moves out of the browser window
