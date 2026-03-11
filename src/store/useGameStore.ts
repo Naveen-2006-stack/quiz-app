@@ -14,13 +14,14 @@ interface GameState {
   sessionStatus: SessionStatus;
   currentQuestionIndex: number;
   participants: Record<string, Participant>;
-  
+
   // Actions
   setSessionStatus: (status: SessionStatus) => void;
   setCurrentQuestionIndex: (index: number) => void;
   updateParticipant: (participant: Participant) => void;
   setParticipants: (participants: Participant[]) => void;
   removeParticipant: (id: string) => void;
+  incrementCheatFlag: (participantId: string) => void;
 }
 
 export const useGameStore = create<GameState>((set) => ({
@@ -49,5 +50,16 @@ export const useGameStore = create<GameState>((set) => ({
     const newParticipants = { ...state.participants };
     delete newParticipants[id];
     return { participants: newParticipants };
+  }),
+
+  incrementCheatFlag: (participantId) => set((state) => {
+    const p = state.participants[participantId];
+    if (!p) return state;
+    return {
+      participants: {
+        ...state.participants,
+        [participantId]: { ...p, cheat_flags: (p.cheat_flags || 0) + 1 },
+      },
+    };
   }),
 }));

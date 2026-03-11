@@ -21,6 +21,8 @@ interface ActiveQuestionCardProps {
   streak: number;
   timeLimit: number; // seconds
   isRevealed: boolean;
+  /** Server-confirmed result from submit_answer_v2 RPC */
+  wasAnswerCorrect?: boolean | null;
   onAnswer: (index: number, reactionTimeMs: number) => Promise<void> | void;
   /** Ghost Mode: when true, the correct answer button gets the secret micro-tell dot */
   isGhostMode?: boolean;
@@ -34,6 +36,7 @@ export const ActiveQuestionCard = ({
   streak,
   timeLimit,
   isRevealed,
+  wasAnswerCorrect = null,
   onAnswer,
   isGhostMode = false,
   isAlreadyAnswered = false,
@@ -97,10 +100,12 @@ export const ActiveQuestionCard = ({
     ? selectedIndex
     : null;
 
-  // Determine if the selected answer was correct based on the 'is_selected_correct' flag from the server
+  // Use server-confirmed result (wasAnswerCorrect) when available; fall back to client-side is_correct
   const didAnswerCorrectly =
-    isRevealed && selectedIndex !== null && selectedIndex >= 0
-      ? !!shuffledOptions[selectedIndex]?.is_correct
+    isRevealed && hasSubmitted
+      ? wasAnswerCorrect !== null && wasAnswerCorrect !== undefined
+        ? wasAnswerCorrect
+        : (selectedIndex !== null && selectedIndex >= 0 ? !!shuffledOptions[selectedIndex]?.is_correct : false)
       : false;
 
   const showReveal = isRevealed && hasSubmitted;

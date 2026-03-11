@@ -63,6 +63,7 @@ export default function HostRoom() {
   const setParticipants = useGameStore((s) => s.setParticipants);
   const setSessionStatus = useGameStore((s) => s.setSessionStatus);
   const setCurrentQuestionIndex = useGameStore((s) => s.setCurrentQuestionIndex);
+  const incrementCheatFlag = useGameStore((s) => s.incrementCheatFlag);
 
   useLiveSession(sessionId, "teacher");
 
@@ -89,14 +90,10 @@ export default function HostRoom() {
       .channel(`game-room:${sessionId}`)
       .on("broadcast", { event: "anti_cheat_violation" }, (payload: any) => {
         const studentId = payload?.payload?.studentId as string | undefined;
-        const studentName = payload?.payload?.studentName as string | undefined;
         if (!studentId) return;
 
-        // Update the participant's violation count in Zustand local state immediately for real-time display
-        // The DB is also updated via the log_violation RPC, but this handles the live broadcast
-        setParticipants(Object.values(participantsMap).map(p => 
-          p.id === studentId ? { ...p, cheat_flags: (p.cheat_flags || 0) + 1 } : p
-        ));
+        // Safely increment using store action (avoids stale closure bug)
+        incrementCheatFlag(studentId);
       })
       .on("broadcast", { event: "emoji_reaction" }, (payload: any) => {
         const emoji = payload?.payload?.emoji as string | undefined;

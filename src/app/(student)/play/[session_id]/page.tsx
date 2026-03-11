@@ -52,6 +52,8 @@ export default function StudentPlayRoom() {
   const [isGhostMode, setIsGhostMode] = useState(false);
   // Notes & Multi-submission
   const [answeredQuestions, setAnsweredQuestions] = useState<Set<string>>(new Set());
+  const [lastAnswerCorrect, setLastAnswerCorrect] = useState<boolean | null>(null);
+  const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [notes, setNotes] = useState("");
   const [isNotesOpen, setIsNotesOpen] = useState(false);
   const [savingNotes, setSavingNotes] = useState(false);
@@ -237,10 +239,23 @@ export default function StudentPlayRoom() {
     return () => { void supabase.removeChannel(controlChannel); };
   }, [sessionId]);
 
-  // Reset reveal state when question advances
+  // Reset reveal state and last answer when question advances
   useEffect(() => {
     setRevealedQuestionIndex(null);
+    setLastAnswerCorrect(null);
   }, [currentQuestionIndex]);
+
+  // Fetch leaderboard when session finishes
+  useEffect(() => {
+    if (sessionStatus !== "finished" || !sessionId) return;
+    supabase
+      .from("participants")
+      .select("display_name, score, streak")
+      .eq("session_id", sessionId)
+      .eq("is_banned", false)
+      .order("score", { ascending: false })
+      .then(({ data }) => { if (data) setLeaderboard(data); });
+  }, [sessionStatus, sessionId]);
 
   const initPlayRoom = async () => {
     const uuid = localStorage.getItem("kahoot_device_uuid");
@@ -389,6 +404,7 @@ export default function StudentPlayRoom() {
 
     if (data) {
       setStreak(data.new_streak);
+      setLastAnswerCorrect(!!data.is_correct);
       setAnsweredQuestions(prev => new Set(prev).add(q.id));
     }
   };
@@ -546,27 +562,52 @@ export default function StudentPlayRoom() {
             timeLimit={questions[currentQuestionIndex].time_limit}
             streak={streak}
             isRevealed={revealedQuestionIndex === currentQuestionIndex}
+            wasAnswerCorrect={lastAnswerCorrect}
             onAnswer={handleAnswerSubmit}
             isGhostMode={isGhostMode}
             isAlreadyAnswered={answeredQuestions.has(questions[currentQuestionIndex].id)}
           />
         )}
 
-        {/* FINISHED: Game over with back button */}
+        {/* FINISHED: Game over with leaderboard */}
         {sessionStatus === "finished" && (
           <motion.div
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="text-center max-w-sm w-full"
+            className="w-full max-w-lg mx-auto"
           >
-            <div className="text-7xl mb-6">🏆</div>
-            <h2 className="text-5xl font-extrabold text-slate-900 dark:text-white mb-3 tracking-tight">
-              Game Over!
-            </h2>
-            <p className="text-xl text-slate-500 dark:text-slate-400 mb-10">
-              Check the host screen for your final ranking and score.
-            </p>
-            {/* ── Feature 4: Back to Dashboard ── */}
+            <div className="text-center mb-8">
+              <div className="text-7xl mb-4">🏆</div>
+              <h2 className="text-4xl font-extrabold text-slate-900 dark:text-white mb-2 tracking-tight">
+                Game Over!
+              </h2>
+              <p className="text-slate-500 dark:text-slate-400">Final Standings</p>
+            </div>
+
+            <div className="space-y-2 mb-8">
+              {leaderboard.map((p, idx) => (
+                <div
+                  key={idx}
+                  className={`flex items-center gap-4 px-5 py-3 rounded-2xl border ${p.display_name === participantName ? "bg-indigo-50 border-indigo-200 dark:bg-indigo-500/10 dark:border-indigo-500/30" : "bg-white border-gray-100 dark:bg-slate-800 dark:border-white/5"}`}
+                >
+                  <span className={`w-9 h-9 flex items-center justify-center rounded-xl text-base font-black shrink-0 ${idx === 0 ? "bg-amber-400 text-white" : idx === 1 ? "bg-slate-300 dark:bg-slate-600 text-slate-700 dark:text-white" : idx === 2 ? "bg-orange-400 text-white" : "bg-gray-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"}`}>
+                    #{idx + 1}
+                  </span>
+                  <span className="flex-1 font-bold text-slate-900 dark:text-white truncate">
+                    {p.display_name}
+                    {p.display_name === participantName && <span className="ml-2 text-xs text-indigo-500 font-semibold">(You)</span>}
+                  </span>
+                  {p.streak > 0 && <span className="text-xs font-semibold text-amber-500">🔥 {p.streak}</span>}
+                  <span className="font-black tabular-nums text-indigo-600 dark:text-indigo-400 text-lg">
+                    {p.score.toLocaleString()}
+                  </span>
+                </div>
+              ))}
+              {leaderboard.length === 0 && (
+                <div className="text-center py-6 text-slate-400">Loading results…</div>
+              )}
+            </div>
+
             <button
               onClick={handleBackToDashboard}
               className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-lg shadow-xl shadow-indigo-600/30 transition-all"
