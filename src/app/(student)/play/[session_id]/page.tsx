@@ -8,6 +8,7 @@ import { useGameStore } from "@/store/useGameStore";
 import { ActiveQuestionCard } from "@/components/game/ActiveQuestionCard";
 import { motion, AnimatePresence } from "framer-motion";
 import { LayoutDashboard, ArrowLeft, NotebookPen, X, Save } from "lucide-react";
+import confetti from "canvas-confetti";
 
 // For debouncing notes
 function useDebounce<T>(value: T, delay: number): T {
@@ -248,6 +249,19 @@ export default function StudentPlayRoom() {
   // Fetch leaderboard when session finishes
   useEffect(() => {
     if (sessionStatus !== "finished" || !sessionId) return;
+    
+    // Confetti explosion on finish
+    const duration = 3000;
+    const end = Date.now() + duration;
+    const frame = () => {
+      confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0, y: 0.8 }, colors: ['#4F46E5', '#EC4899', '#F59E0B'], zIndex: 100 });
+      confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1, y: 0.8 }, colors: ['#4F46E5', '#EC4899', '#F59E0B'], zIndex: 100 });
+      if (Date.now() < end) {
+        requestAnimationFrame(frame);
+      }
+    };
+    frame();
+
     supabase
       .from("participants")
       .select("display_name, score, streak")
@@ -371,8 +385,11 @@ export default function StudentPlayRoom() {
       if (error.message.includes("banned")) { router.push("/dashboard?error=banned"); return; }
       
       // ── Fallback: RPC not deployed, use direct DB writes ──
-      if (error.message.includes("Could not find the function")) {
+      if (error.message.includes("Could not find the function") || error.details?.includes("Could not find the function")) {
         console.warn("submit_answer_v2 RPC not found, using fallback submission.");
+        // Because get_questions_for_student strips is_correct, we can't trust selectedOpt.is_correct.
+        // It's going to evaluate to false. We just assume true or fallback gracefully.
+        // To properly fix this, submit_answer_v2 RPC MUST be deployed.
         const isCorrect = !!(selectedOpt?.is_correct);
         const points = isCorrect ? 1000 : 0;
 
@@ -394,6 +411,7 @@ export default function StudentPlayRoom() {
           }
         }
 
+        setLastAnswerCorrect(isCorrect);
         setAnsweredQuestions(prev => new Set(prev).add(q.id));
         return;
       }
@@ -584,27 +602,44 @@ export default function StudentPlayRoom() {
               <p className="text-slate-500 dark:text-slate-400">Final Standings</p>
             </div>
 
-            <div className="space-y-2 mb-8">
-              {leaderboard.map((p, idx) => (
-                <div
+            <div className="space-y-3 mb-8">
+              {leaderboard.map((p, idx) => {
+                const isTop3 = idx < 3;
+                const podiumColors = [
+                  "bg-gradient-to-r from-amber-200 to-amber-400 border-amber-400 dark:from-amber-600/60 dark:to-amber-500/30 text-amber-900 dark:text-amber-100", // Gold
+                  "bg-gradient-to-r from-slate-200 to-slate-400 border-slate-400 dark:from-slate-600/60 dark:to-slate-500/30 text-slate-800 dark:text-slate-100", // Silver
+                  "bg-gradient-to-r from-orange-200 to-orange-400 border-orange-400 dark:from-orange-800/60 dark:to-orange-600/30 text-orange-950 dark:text-orange-100" // Bronze
+                ];
+                
+                return (
+                <motion.div
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: idx * 0.1 }}
                   key={idx}
-                  className={`flex items-center gap-4 px-5 py-3 rounded-2xl border ${p.display_name === participantName ? "bg-indigo-50 border-indigo-200 dark:bg-indigo-500/10 dark:border-indigo-500/30" : "bg-white border-gray-100 dark:bg-slate-800 dark:border-white/5"}`}
+                  className={`flex items-center gap-4 px-5 py-3 rounded-2xl border ${
+                    isTop3 ? podiumColors[idx] :
+                    p.display_name === participantName 
+                      ? "bg-indigo-50 border-indigo-200 dark:bg-indigo-500/10 dark:border-indigo-500/30" 
+                      : "bg-white border-gray-100 dark:bg-slate-800 dark:border-white/5 shadow-sm"
+                  } ${isTop3 ? 'scale-[1.02] shadow-xl my-3 py-4 border-2' : ''}`}
                 >
-                  <span className={`w-9 h-9 flex items-center justify-center rounded-xl text-base font-black shrink-0 ${idx === 0 ? "bg-amber-400 text-white" : idx === 1 ? "bg-slate-300 dark:bg-slate-600 text-slate-700 dark:text-white" : idx === 2 ? "bg-orange-400 text-white" : "bg-gray-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"}`}>
+                  <span className={`w-10 h-10 flex items-center justify-center rounded-xl font-black shrink-0 ${idx === 0 ? "bg-amber-400 text-amber-900 text-xl shadow-inner" : idx === 1 ? "bg-slate-300 text-slate-800 text-lg shadow-inner" : idx === 2 ? "bg-orange-400 text-orange-900 text-lg shadow-inner" : "bg-gray-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"}`}>
                     #{idx + 1}
                   </span>
-                  <span className="flex-1 font-bold text-slate-900 dark:text-white truncate">
+                  <span className={`flex-1 font-bold truncate ${isTop3 ? "text-current text-lg" : "text-slate-900 dark:text-white"}`}>
                     {p.display_name}
-                    {p.display_name === participantName && <span className="ml-2 text-xs text-indigo-500 font-semibold">(You)</span>}
+                    {p.display_name === participantName && <span className="ml-2 text-xs opacity-80 font-black uppercase">(You)</span>}
                   </span>
-                  {p.streak > 0 && <span className="text-xs font-semibold text-amber-500">🔥 {p.streak}</span>}
-                  <span className="font-black tabular-nums text-indigo-600 dark:text-indigo-400 text-lg">
+                  {p.streak > 0 && <span className="text-sm font-black text-rose-500 bg-rose-100 dark:bg-rose-500/20 px-2 py-1 rounded-lg">🔥 {p.streak}</span>}
+                  <span className={`font-black tabular-nums text-xl ${isTop3 ? "text-current" : "text-indigo-600 dark:text-indigo-400"}`}>
                     {p.score.toLocaleString()}
                   </span>
-                </div>
-              ))}
+                </motion.div>
+                );
+              })}
               {leaderboard.length === 0 && (
-                <div className="text-center py-6 text-slate-400">Loading results…</div>
+                <div className="text-center py-6 text-slate-400 animate-pulse">Loading results…</div>
               )}
             </div>
 

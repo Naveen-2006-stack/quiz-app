@@ -63,9 +63,7 @@ CREATE OR REPLACE FUNCTION public.submit_answer_v2(
   p_session_id UUID,
   p_participant_id UUID,
   p_question_id UUID,
-  p_option_index INTEGER, -- The index in the SHUFFLED list sent to client? 
-                          -- Actually, it's better to use the option TEXT or a secure ID.
-                          -- For simplicity with current frontend, we'll use option text.
+  p_option_index INTEGER, 
   p_option_text TEXT,
   p_reaction_time_ms INTEGER
 )
@@ -75,7 +73,6 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_correct_option TEXT;
   v_is_correct BOOLEAN;
   v_base_points INTEGER;
   v_max_time_ms INTEGER;
@@ -98,22 +95,51 @@ BEGIN
   END IF;
 
   -- 2. Validate Answer
-  -- Find the correct option text for this question
+  -- Get question metadata and check if the selected text matches ANY correct option.
   SELECT 
-    (elem->>'text'), 
     base_points, 
     (time_limit * 1000),
-    COALESCE(qz.timer_based_marking, true)
-  INTO v_correct_option, v_base_points, v_max_time_ms, v_timer_enabled
+    COALESCE(qz.timer_based_marking, true),
+    EXISTS (
+      SELECT 1 FROM jsonb_array_elements(q.options) AS e 
+      WHERE (e->>'is_correct' = 'true' OR e->>'is_correct' = '1')
+      AND BTRIM(LOWER(e->>'text')) = BTRIM(LOWER(p_option_text))
+    )
+  INTO v_base_points, v_max_time_ms, v_timer_enabled, v_is_correct
   FROM questions q
   JOIN quizzes qz ON qz.id = q.quiz_id
-  CROSS JOIN LATERAL jsonb_array_elements(options) AS elem
-  WHERE q.id = p_question_id AND (elem->>'is_correct')::boolean = true
-  LIMIT 1;
+  WHERE q.id = p_question_id;
 
-  v_is_correct := (p_option_text = v_correct_option);
+  -- 3. Calculate Points & Streak BEFORE updating rows
+  IF v_is_correct THEN
+    IF v_timer_enabled THEN
+      v_points_awarded := ROUND(v_base_points * 0.5 + v_base_points * 0.5 * (GREATEST(0, v_max_time_ms - p_reaction_time_ms)::float / GREATEST(1, v_max_time_ms)));
+    ELSE
+      v_points_awarded := v_base_points;
+    END IF;
 
-  -- 4. Record Response (Must be done first to catch duplicates)
+    -- Update Streak
+    UPDATE participants 
+    SET streak = streak + 1
+    WHERE id = p_participant_id
+    RETURNING streak INTO v_current_streak;
+
+    -- Calculate Streak Bonus
+    IF v_current_streak >= 3 THEN
+      v_streak_bonus := LEAST(300, v_current_streak * 50);
+      v_points_awarded := v_points_awarded + v_streak_bonus;
+    END IF;
+
+    -- Apply total points to participant score
+    UPDATE participants SET score = score + v_points_awarded WHERE id = p_participant_id;
+
+  ELSE
+    -- Reset Streak
+    UPDATE participants SET streak = 0 WHERE id = p_participant_id;
+    v_current_streak := 0;
+  END IF;
+
+  -- 4. Record Response
   BEGIN
     INSERT INTO student_responses (
       session_id, participant_id, question_id, reaction_time_ms, is_correct, points_awarded, streak_bonus
@@ -129,38 +155,6 @@ BEGIN
       'error', 'Already answered'
     );
   END;
-
-  -- 3. Calculate Points & Streak (Only if insert succeeds)
-  IF v_is_correct THEN
-    IF v_timer_enabled THEN
-      v_points_awarded := ROUND(v_base_points * 0.5 + v_base_points * 0.5 * (GREATEST(0, v_max_time_ms - p_reaction_time_ms)::float / v_max_time_ms));
-    ELSE
-      v_points_awarded := v_base_points;
-    END IF;
-
-    -- Update Streak
-    UPDATE participants 
-    SET streak = streak + 1,
-        score = score + v_points_awarded -- We'll add bonus below
-    WHERE id = p_participant_id
-    RETURNING streak INTO v_current_streak;
-
-    -- Streak Bonus
-    IF v_current_streak >= 3 THEN
-      v_streak_bonus := LEAST(300, v_current_streak * 50);
-      v_points_awarded := v_points_awarded + v_streak_bonus;
-      UPDATE participants SET score = score + v_streak_bonus WHERE id = p_participant_id;
-      
-      -- Update the response we just inserted with the correct bonus and total points
-      UPDATE student_responses 
-      SET points_awarded = v_points_awarded, streak_bonus = v_streak_bonus
-      WHERE session_id = p_session_id AND participant_id = p_participant_id AND question_id = p_question_id;
-    END IF;
-  ELSE
-    -- Reset Streak
-    UPDATE participants SET streak = 0 WHERE id = p_participant_id;
-    v_current_streak := 0;
-  END IF;
 
   RETURN jsonb_build_object(
     'is_correct', v_is_correct,

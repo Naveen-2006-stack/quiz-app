@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useEffect, useRef, useState } from 'react';
 import { CheckCircle } from 'lucide-react';
+import confetti from 'canvas-confetti';
 
 const OPTION_COLORS = [
   { bg: 'bg-rose-500', hover: 'hover:bg-rose-600', border: 'border-rose-400', text: 'text-white', label: 'bg-rose-600' },
@@ -114,6 +115,19 @@ export const ActiveQuestionCard = ({
   const timerColor =
     timeFraction > 0.5 ? 'bg-emerald-500' : timeFraction > 0.25 ? 'bg-amber-500' : 'bg-rose-500';
 
+  // Trigger Confetti when answer is revealed and correct
+  useEffect(() => {
+    if (showReveal && didAnswerCorrectly) {
+      confetti({
+        particleCount: 150,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#10B981', '#34D399', '#059669', '#FCD34D'],
+        zIndex: 100 // ensure it's above other elements
+      });
+    }
+  }, [showReveal, didAnswerCorrectly]);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -138,10 +152,10 @@ export const ActiveQuestionCard = ({
             animate={{ scale: timeLeft <= 5 && timeLeft > 0 ? [1, 1.15, 1] : 1 }}
             transition={{ repeat: timeLeft <= 5 && timeLeft > 0 ? Infinity : 0, duration: 0.8 }}
             className={cn(
-              'text-3xl font-black font-mono tracking-tighter px-4 py-2 rounded-2xl',
-              timeLeft <= 5
-                ? 'bg-rose-100 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400'
-                : 'bg-gray-100 text-slate-800 dark:bg-slate-900/50 dark:text-gray-200'
+              'text-3xl font-black font-mono tracking-tighter px-4 py-2 rounded-2xl border-2 transition-all duration-300',
+              timeLeft <= 5 && timeLeft > 0
+                ? 'bg-rose-100/90 text-rose-600 border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.6)] dark:bg-rose-500/20 dark:text-rose-400'
+                : 'bg-gray-100 text-slate-800 border-transparent dark:bg-slate-900/50 dark:text-gray-200 shadow-none'
             )}
           >
             {Math.max(0, timeLeft).toString().padStart(2, '0')}s
