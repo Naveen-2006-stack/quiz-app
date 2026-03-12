@@ -166,7 +166,8 @@ export default function SessionAnalyticsReportPage() {
         supabase
           .from("participants")
           .select("id, display_name, score, notes, cheat_flags")
-          .eq("session_id", sessionId),
+          .eq("session_id", sessionId)
+          .eq("is_banned", false),
         supabase
           .from("student_responses")
           .select("question_id, participant_id, is_correct")

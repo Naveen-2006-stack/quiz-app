@@ -10,7 +10,7 @@ import Link from "next/link";
 interface Option { text: string; is_correct: boolean; }
 type QuestionType = "mcq" | "true_false";
 interface Question { id: string; question_text: string; question_type: QuestionType; time_limit: number; base_points: number; options: Option[]; order_index: number; _isNew?: boolean; }
-interface Quiz { id: string; title: string; description: string; timer_based_marking?: boolean; }
+interface Quiz { id: string; title: string; description: string; timer_based_marking?: boolean; test_mode?: boolean; }
 
 const getMcqDefaultOptions = (): Option[] => [
   { text: "", is_correct: true },
@@ -95,12 +95,16 @@ export default function QuizEditor() {
 
     if (nextType === "true_false") {
       const currentlyCorrect = current.options.findIndex((o) => o.is_correct);
+      // Preserve intent: if the second option (index 1) was correct → False is correct.
+      // In all other cases (index 0, 2, 3, or -1 meaning none) → True is correct.
+      // This ensures exactly one of True/False is always marked correct.
+      const trueShouldBeCorrect = currentlyCorrect !== 1;
       updated[qIndex] = {
         ...current,
         question_type: "true_false",
         options: [
-          { text: "True", is_correct: currentlyCorrect <= 0 },
-          { text: "False", is_correct: currentlyCorrect === 1 },
+          { text: "True", is_correct: trueShouldBeCorrect },
+          { text: "False", is_correct: !trueShouldBeCorrect },
         ],
       };
     } else {
@@ -136,7 +140,7 @@ export default function QuizEditor() {
       // 1. Update Quiz Title/Desc
       const { error: quizError } = await supabase
         .from('quizzes')
-        .update({ title: quiz.title, description: quiz.description, timer_based_marking: quiz.timer_based_marking })
+        .update({ title: quiz.title, description: quiz.description, timer_based_marking: quiz.timer_based_marking, test_mode: quiz.test_mode ?? false })
         .eq('id', quiz.id);
       if (quizError) errors.push(`Quiz details: ${quizError.message}`);
 
@@ -237,6 +241,24 @@ export default function QuizEditor() {
           >
             <span
               className={`${quiz.timer_based_marking ? 'translate-x-6' : 'translate-x-1'
+                } inline-block h-4 w-4 transform rounded-full bg-white transition-transform`}
+            />
+          </button>
+        </div>
+
+        {/* Test Mode Toggle */}
+        <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-900/50 rounded-2xl border border-gray-100 dark:border-white/5">
+          <div>
+            <h3 className="text-sm font-bold text-slate-800 dark:text-white">Test Mode</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">When on, students cannot see their marks or the final leaderboard — only you can</p>
+          </div>
+          <button
+            onClick={() => setQuiz({ ...quiz, test_mode: !quiz.test_mode })}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ring-2 ring-offset-2 ring-transparent focus:ring-violet-500 ${quiz.test_mode ? 'bg-violet-600' : 'bg-gray-300 dark:bg-slate-700'
+              }`}
+          >
+            <span
+              className={`${quiz.test_mode ? 'translate-x-6' : 'translate-x-1'
                 } inline-block h-4 w-4 transform rounded-full bg-white transition-transform`}
             />
           </button>

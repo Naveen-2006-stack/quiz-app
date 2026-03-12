@@ -64,6 +64,7 @@ export default function HostRoom() {
   const setSessionStatus = useGameStore((s) => s.setSessionStatus);
   const setCurrentQuestionIndex = useGameStore((s) => s.setCurrentQuestionIndex);
   const incrementCheatFlag = useGameStore((s) => s.incrementCheatFlag);
+  const removeParticipant = useGameStore((s) => s.removeParticipant);
 
   useLiveSession(sessionId, "teacher");
 
@@ -251,8 +252,12 @@ export default function HostRoom() {
         payload: { targetId: pId },
       });
 
-      // 3. Local state update
-      setParticipants(Object.values(participantsMap).filter(p => p.id !== pId));
+      // 3. Local state update — remove from store immediately using the targeted action
+      // (useLiveSession will also handle the DB UPDATE event, but this is instant)
+      removeParticipant(pId);
+
+      // 4. Close violations modal if open
+      setSelectedViolationsParticipant(null);
     } catch (err: any) {
       console.error("Failed to kick participant:", err.message);
     }
@@ -432,7 +437,7 @@ export default function HostRoom() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ type: "spring", delay: idx * 0.04 }}
-                className="flex items-center gap-6 bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5"
+                className="group flex items-center gap-6 bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5"
               >
                 <div className={cn(
                   "w-10 h-10 flex items-center justify-center rounded-xl text-lg font-black",

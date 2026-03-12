@@ -28,6 +28,8 @@ interface ActiveQuestionCardProps {
   /** Ghost Mode: when true, the correct answer button gets the secret micro-tell dot */
   isGhostMode?: boolean;
   isAlreadyAnswered?: boolean;
+  /** Test Mode: when true, students cannot see marks or correct/incorrect feedback */
+  isTestMode?: boolean;
 }
 
 export const ActiveQuestionCard = ({
@@ -41,6 +43,7 @@ export const ActiveQuestionCard = ({
   onAnswer,
   isGhostMode = false,
   isAlreadyAnswered = false,
+  isTestMode = false,
 }: ActiveQuestionCardProps) => {
   const [timeLeft, setTimeLeft] = useState(timeLimit);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null); // highlighted but not yet submitted
@@ -117,7 +120,7 @@ export const ActiveQuestionCard = ({
 
   // Trigger Confetti when answer is revealed and correct
   useEffect(() => {
-    if (showReveal && didAnswerCorrectly) {
+    if (showReveal && didAnswerCorrectly && !isTestMode) {
       confetti({
         particleCount: 150,
         spread: 70,
@@ -193,12 +196,14 @@ export const ActiveQuestionCard = ({
               exit={{ opacity: 0 }}
               className={cn(
                 'rounded-[2rem] p-12 text-center',
-                didAnswerCorrectly ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'
+                isTestMode
+                  ? 'bg-slate-700 text-white'
+                  : didAnswerCorrectly ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'
               )}
             >
-              <div className="text-5xl mb-3">{didAnswerCorrectly ? '✅' : '❌'}</div>
+              <div className="text-5xl mb-3">{isTestMode ? '📝' : didAnswerCorrectly ? '✅' : '❌'}</div>
               <h3 className="text-4xl font-black tracking-tight mb-2">
-                {didAnswerCorrectly ? 'Correct!' : 'Incorrect!'}
+                {isTestMode ? 'Answer Submitted' : didAnswerCorrectly ? 'Correct!' : 'Incorrect!'}
               </h3>
               <p className="text-white/80">Waiting for next question...</p>
             </motion.div>

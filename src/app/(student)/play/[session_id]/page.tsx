@@ -49,8 +49,12 @@ export default function StudentPlayRoom() {
   const [streak, setStreak] = useState(0);
   const [reactionCooldown, setReactionCooldown] = useState(false);
   const reactionChannelRef = useRef<any>(null);
+  // Cached auth token for reliable page-close logging (keepalive fetch needs auth headers)
+  const authTokenRef = useRef<string>("");
   // Ghost Mode: fetched from the user's OWN profile — never exposed to host or peers
   const [isGhostMode, setIsGhostMode] = useState(false);
+  // Test Mode: when true, marks and leaderboard are hidden from students
+  const [isTestMode, setIsTestMode] = useState(false);
   // Notes & Multi-submission
   const [answeredQuestions, setAnsweredQuestions] = useState<Set<string>>(new Set());
   const [lastAnswerCorrect, setLastAnswerCorrect] = useState<boolean | null>(null);
@@ -59,15 +63,17 @@ export default function StudentPlayRoom() {
   const [isNotesOpen, setIsNotesOpen] = useState(false);
   const [savingNotes, setSavingNotes] = useState(false);
   const debouncedNotes = useDebounce(notes, 1000);
+  // Guard: prevent auto-save from overwriting DB notes before they've been loaded
+  const notesInitializedRef = useRef(false);
 
   // Universal emoji floats — same logic as Host screen
   const [floatingEmojis, setFloatingEmojis] = useState<FloatingEmoji[]>([]);
 
   useLiveSession(sessionId, "student");
 
-  // Auto-save notes
+  // Auto-save notes (only after initial notes have been loaded from DB to avoid overwriting)
   useEffect(() => {
-    if (!participantId || !sessionId) return;
+    if (!participantId || !sessionId || !notesInitializedRef.current) return;
     const saveNotes = async () => {
       setSavingNotes(true);
       await supabase.rpc("update_participant_notes", {
@@ -90,12 +96,19 @@ export default function StudentPlayRoom() {
     if (!sessionId || !participantId || sessionStatus !== "active") return;
 
     let strikeCooldown = false;
+    // Used to distinguish a genuine tab switch from a page reload/close.
+    // visibilitychange fires BEFORE beforeunload, so we defer the "Tab Switch" strike
+    // by a short time — if beforeunload fires within that window, we cancel it and
+    // log "Page Refresh / Leave" instead (avoiding double-counting).
+    let visibilityTimer: ReturnType<typeof setTimeout> | null = null;
+    let isUnloading = false;
+
     const gameRoomChannel = supabase.channel(`game-room:${sessionId}`).subscribe();
 
     const triggerStrike = async (type: string) => {
       if (strikeCooldown) return;
       strikeCooldown = true;
-      setTimeout(() => { strikeCooldown = false; }, 3000); // 3-second debounce to prevent spam
+      setTimeout(() => { strikeCooldown = false; }, 3000);
 
       await gameRoomChannel.send({
         type: "broadcast",
@@ -110,30 +123,55 @@ export default function StudentPlayRoom() {
     };
 
     const onVisibilityChange = () => {
-      if (document.hidden) triggerStrike("Tab Switch / Minimized");
+      if (document.hidden) {
+        // Defer 200 ms — if beforeunload fires within this window (page reload/close),
+        // cancel the "Tab Switch" strike and let onPageLeave handle it instead.
+        visibilityTimer = setTimeout(() => {
+          if (!isUnloading) void triggerStrike("Tab Switch / Minimized");
+        }, 200);
+      }
     };
 
     const onPageLeave = () => {
-      // sendBeacon is guaranteed to fire even when the page is closing/reloading.
-      // The regular async triggerStrike won't complete in time on unload.
+      isUnloading = true;
+      // Cancel any pending "Tab Switch" timer — this is a reload, not a tab switch
+      if (visibilityTimer !== null) {
+        clearTimeout(visibilityTimer);
+        visibilityTimer = null;
+      }
+
+      // Use fetch with keepalive=true for reliable page-close logging.
+      // sendBeacon cannot pass Authorization headers, but fetch+keepalive can.
+      // The keepalive flag ensures the request completes even after the page unloads.
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
       const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-      if (!supabaseUrl || !supabaseKey || !participantId || !sessionId) return;
-      
-      const body = JSON.stringify({
-        p_session_id: sessionId,
-        p_participant_id: participantId,
-        p_violation_type: "Page Refresh / Leave",
-      });
-      
-      navigator.sendBeacon(
-        `${supabaseUrl}/rest/v1/rpc/log_violation?apikey=${supabaseKey}`,
-        new Blob([body], {
-          type: "application/json",
-        })
-      );
-      // Also attempt the broadcast (best-effort on unload)
-      void triggerStrike("Page Refresh / Leave");
+      if (supabaseUrl && supabaseKey && participantId && sessionId && authTokenRef.current) {
+        fetch(`${supabaseUrl}/rest/v1/rpc/log_violation`, {
+          method: "POST",
+          keepalive: true,
+          headers: {
+            "apikey": supabaseKey,
+            "Authorization": `Bearer ${authTokenRef.current}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            p_session_id: sessionId,
+            p_participant_id: participantId,
+            p_violation_type: "Page Refresh / Leave",
+          }),
+        }).catch(() => {}); // Silence errors — page is closing
+      }
+
+      // Also broadcast real-time badge update to host (best-effort on unload).
+      // Since visibilityTimer was cleared, strikeCooldown is still false here.
+      if (!strikeCooldown) {
+        strikeCooldown = true;
+        gameRoomChannel.send({
+          type: "broadcast",
+          event: "anti_cheat_violation",
+          payload: { studentName: participantName, studentId: participantId, violationType: "Page Refresh / Leave" },
+        }).catch(() => {});
+      }
     };
 
     // Detect when cursor moves out of the browser window
@@ -294,9 +332,15 @@ export default function StudentPlayRoom() {
     const uuid = localStorage.getItem("kahoot_device_uuid");
     if (!uuid) { router.push("/join"); return; }
 
+    // Cache auth token for reliable page-close logging (keepalive fetch needs it)
+    const { data: { session: authSession } } = await supabase.auth.getSession();
+    if (authSession?.access_token) {
+      authTokenRef.current = authSession.access_token;
+    }
+
     const { data: sData } = await supabase
       .from("live_sessions")
-      .select("*, quizzes(title, timer_based_marking)")
+      .select("*, quizzes(title, timer_based_marking, test_mode)")
       .eq("id", sessionId)
       .single();
 
@@ -304,6 +348,7 @@ export default function StudentPlayRoom() {
       setSessionInfo(sData);
       setSessionStatus(sData.status);
       setCurrentQuestionIndex(sData.current_question_index ?? 0);
+      setIsTestMode(!!(sData as any).quizzes?.test_mode);
     }
 
     if (sData?.id) {
@@ -357,6 +402,8 @@ export default function StudentPlayRoom() {
       if (notesData.data?.notes) {
         setNotes(notesData.data.notes);
       }
+      // Mark notes as initialized so auto-save won't overwrite with empty string
+      notesInitializedRef.current = true;
 
       try {
         const { data: isGhost } = await supabase.rpc("get_ghost_mode_for_participant", {
@@ -613,6 +660,7 @@ export default function StudentPlayRoom() {
             onAnswer={handleAnswerSubmit}
             isGhostMode={isGhostMode}
             isAlreadyAnswered={answeredQuestions.has(questions[currentQuestionIndex].id)}
+            isTestMode={isTestMode}
           />
         )}
 
@@ -626,51 +674,56 @@ export default function StudentPlayRoom() {
             <div className="text-center mb-8">
               <div className="text-7xl mb-4">🏆</div>
               <h2 className="text-4xl font-extrabold text-slate-900 dark:text-white mb-2 tracking-tight">
-                Game Over!
+                {isTestMode ? "Quiz Completed!" : "Game Over!"}
               </h2>
-              <p className="text-slate-500 dark:text-slate-400">Final Standings</p>
+              <p className="text-slate-500 dark:text-slate-400">
+                {isTestMode ? "Your responses have been recorded. Results will be shared by your host." : "Final Standings"}
+              </p>
             </div>
 
-            <div className="space-y-3 mb-8">
-              {leaderboard.map((p, idx) => {
-                const isTop3 = idx < 3;
-                const podiumColors = [
-                  "bg-gradient-to-r from-amber-200 to-amber-400 border-amber-400 dark:from-amber-600/60 dark:to-amber-500/30 text-amber-900 dark:text-amber-100", // Gold
-                  "bg-gradient-to-r from-slate-200 to-slate-400 border-slate-400 dark:from-slate-600/60 dark:to-slate-500/30 text-slate-800 dark:text-slate-100", // Silver
-                  "bg-gradient-to-r from-orange-200 to-orange-400 border-orange-400 dark:from-orange-800/60 dark:to-orange-600/30 text-orange-950 dark:text-orange-100" // Bronze
-                ];
-                
-                return (
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: idx * 0.1 }}
-                  key={idx}
-                  className={`flex items-center gap-4 px-5 py-3 rounded-2xl border ${
-                    isTop3 ? podiumColors[idx] :
-                    p.display_name === participantName 
-                      ? "bg-indigo-50 border-indigo-200 dark:bg-indigo-500/10 dark:border-indigo-500/30" 
-                      : "bg-white border-gray-100 dark:bg-slate-800 dark:border-white/5 shadow-sm"
-                  } ${isTop3 ? 'scale-[1.02] shadow-xl my-3 py-4 border-2' : ''}`}
-                >
-                  <span className={`w-10 h-10 flex items-center justify-center rounded-xl font-black shrink-0 ${idx === 0 ? "bg-amber-400 text-amber-900 text-xl shadow-inner" : idx === 1 ? "bg-slate-300 text-slate-800 text-lg shadow-inner" : idx === 2 ? "bg-orange-400 text-orange-900 text-lg shadow-inner" : "bg-gray-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"}`}>
-                    #{idx + 1}
-                  </span>
-                  <span className={`flex-1 font-bold truncate ${isTop3 ? "text-current text-lg" : "text-slate-900 dark:text-white"}`}>
-                    {p.display_name}
-                    {p.display_name === participantName && <span className="ml-2 text-xs opacity-80 font-black uppercase">(You)</span>}
-                  </span>
-                  {p.streak > 0 && <span className="text-sm font-black text-rose-500 bg-rose-100 dark:bg-rose-500/20 px-2 py-1 rounded-lg">🔥 {p.streak}</span>}
-                  <span className={`font-black tabular-nums text-xl ${isTop3 ? "text-current" : "text-indigo-600 dark:text-indigo-400"}`}>
-                    {p.score.toLocaleString()}
-                  </span>
-                </motion.div>
-                );
-              })}
-              {leaderboard.length === 0 && (
-                <div className="text-center py-6 text-slate-400 animate-pulse">Loading results…</div>
-              )}
-            </div>
+            {/* Leaderboard — hidden in test mode */}
+            {!isTestMode && (
+              <div className="space-y-3 mb-8">
+                {leaderboard.map((p, idx) => {
+                  const isTop3 = idx < 3;
+                  const podiumColors = [
+                    "bg-gradient-to-r from-amber-200 to-amber-400 border-amber-400 dark:from-amber-600/60 dark:to-amber-500/30 text-amber-900 dark:text-amber-100",
+                    "bg-gradient-to-r from-slate-200 to-slate-400 border-slate-400 dark:from-slate-600/60 dark:to-slate-500/30 text-slate-800 dark:text-slate-100",
+                    "bg-gradient-to-r from-orange-200 to-orange-400 border-orange-400 dark:from-orange-800/60 dark:to-orange-600/30 text-orange-950 dark:text-orange-100"
+                  ];
+
+                  return (
+                  <motion.div
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: idx * 0.1 }}
+                    key={idx}
+                    className={`flex items-center gap-4 px-5 py-3 rounded-2xl border ${
+                      isTop3 ? podiumColors[idx] :
+                      p.display_name === participantName
+                        ? "bg-indigo-50 border-indigo-200 dark:bg-indigo-500/10 dark:border-indigo-500/30"
+                        : "bg-white border-gray-100 dark:bg-slate-800 dark:border-white/5 shadow-sm"
+                    } ${isTop3 ? 'scale-[1.02] shadow-xl my-3 py-4 border-2' : ''}`}
+                  >
+                    <span className={`w-10 h-10 flex items-center justify-center rounded-xl font-black shrink-0 ${idx === 0 ? "bg-amber-400 text-amber-900 text-xl shadow-inner" : idx === 1 ? "bg-slate-300 text-slate-800 text-lg shadow-inner" : idx === 2 ? "bg-orange-400 text-orange-900 text-lg shadow-inner" : "bg-gray-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"}`}>
+                      #{idx + 1}
+                    </span>
+                    <span className={`flex-1 font-bold truncate ${isTop3 ? "text-current text-lg" : "text-slate-900 dark:text-white"}`}>
+                      {p.display_name}
+                      {p.display_name === participantName && <span className="ml-2 text-xs opacity-80 font-black uppercase">(You)</span>}
+                    </span>
+                    {p.streak > 0 && <span className="text-sm font-black text-rose-500 bg-rose-100 dark:bg-rose-500/20 px-2 py-1 rounded-lg">🔥 {p.streak}</span>}
+                    <span className={`font-black tabular-nums text-xl ${isTop3 ? "text-current" : "text-indigo-600 dark:text-indigo-400"}`}>
+                      {p.score.toLocaleString()}
+                    </span>
+                  </motion.div>
+                  );
+                })}
+                {leaderboard.length === 0 && (
+                  <div className="text-center py-6 text-slate-400 animate-pulse">Loading results…</div>
+                )}
+              </div>
+            )}
 
             <button
               onClick={handleBackToDashboard}

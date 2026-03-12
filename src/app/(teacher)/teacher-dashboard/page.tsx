@@ -153,6 +153,7 @@ export default function TeacherDashboard() {
       .from('participants')
       .select('display_name, score, streak')
       .eq('session_id', sessionId)
+      .eq('is_banned', false)
       .order('score', { ascending: false });
 
     setLeaderboardRows((data || []) as LeaderboardRow[]);

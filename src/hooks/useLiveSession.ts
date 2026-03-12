@@ -68,7 +68,15 @@ export function useLiveSession(sessionId: string, role: 'teacher' | 'student') {
           table: 'participants',
           filter: `session_id=eq.${sessionId}`,
         },
-        (payload) => updateParticipant(payload.new as any)
+        (payload) => {
+          const updated = payload.new as any;
+          // Remove banned participants from the active roster immediately
+          if (updated.is_banned === true) {
+            removeParticipant(updated.id);
+          } else {
+            updateParticipant(updated);
+          }
+        }
       )
       .on(
         'postgres_changes',

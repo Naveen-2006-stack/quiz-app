@@ -24,13 +24,20 @@ export default function ReportsDashboard() {
       .select(`
         *,
         quizzes(title),
-        participants(id, display_name, score, cheat_flags)
+        participants!inner(id, display_name, score, cheat_flags, is_banned)
       `)
       .eq("teacher_id", user.id)
       .in("status", ["active", "finished", "completed"])
       .order("started_at", { ascending: false });
 
-    if (data) setSessions(data);
+    if (data) {
+      // Exclude banned participants from each session's participant list
+      const cleaned = data.map(sess => ({
+        ...sess,
+        participants: (sess.participants || []).filter((p: any) => !p.is_banned)
+      }));
+      setSessions(cleaned);
+    }
     setLoading(false);
   };
 
