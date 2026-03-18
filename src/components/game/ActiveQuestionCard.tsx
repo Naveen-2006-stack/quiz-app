@@ -6,7 +6,16 @@ import { useEffect, useRef, useState } from 'react';
 import { CheckCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
-const OPTION_COLORS = [
+type OptionColor = {
+  bg: string;
+  hover: string;
+  border: string;
+  text: string;
+  label: string;
+  depth: string;
+};
+
+const OPTION_COLORS: OptionColor[] = [
   { bg: 'bg-rose-500', hover: 'hover:bg-rose-600', border: 'border-rose-400', text: 'text-white', label: 'bg-rose-600', depth: 'shadow-[0_5px_0_rgba(190,24,93,0.45)] dark:shadow-none' },
   { bg: 'bg-blue-500', hover: 'hover:bg-blue-600', border: 'border-blue-400', text: 'text-white', label: 'bg-blue-600', depth: 'shadow-[0_5px_0_rgba(29,78,216,0.45)] dark:shadow-none' },
   { bg: 'bg-amber-500', hover: 'hover:bg-amber-600', border: 'border-amber-400', text: 'text-white', label: 'bg-amber-600', depth: 'shadow-[0_5px_0_rgba(180,83,9,0.45)] dark:shadow-none' },
@@ -255,10 +264,10 @@ export const ActiveQuestionCard = ({
 
                   // Normal color logic — ghost mode never overrides the button color.
                   // (Doing so was causing the backend-confirmed correctness to appear wrong.)
-                  const color = isTrueFalse
+                  const color: OptionColor = isTrueFalse
                     ? (opt.text.toLowerCase() === 'false'
-                      ? { bg: 'bg-rose-500', hover: 'hover:bg-rose-600', border: 'border-rose-400', text: 'text-white', label: 'bg-rose-600' }
-                      : { bg: 'bg-blue-500', hover: 'hover:bg-blue-600', border: 'border-blue-400', text: 'text-white', label: 'bg-blue-600' })
+                      ? { bg: 'bg-rose-500', hover: 'hover:bg-rose-600', border: 'border-rose-400', text: 'text-white', label: 'bg-rose-600', depth: 'shadow-[0_5px_0_rgba(190,24,93,0.45)] dark:shadow-none' }
+                      : { bg: 'bg-blue-500', hover: 'hover:bg-blue-600', border: 'border-blue-400', text: 'text-white', label: 'bg-blue-600', depth: 'shadow-[0_5px_0_rgba(29,78,216,0.45)] dark:shadow-none' })
                     : OPTION_COLORS[idx % OPTION_COLORS.length];
 
                   const isSelected = selectedIndex === idx;
