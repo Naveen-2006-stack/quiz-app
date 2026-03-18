@@ -23,6 +23,8 @@ export default function AdminDashboard() {
   const [completedSessionsList, setCompletedSessionsList] = useState<CompletedSessionRow[]>([]);
   const [feedbackList, setFeedbackList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sessionToKill, setSessionToKill] = useState<string | null>(null);
+  const [forceEnding, setForceEnding] = useState(false);
   // Ghost Mode: tracks which user ID is currently in the 1-second confirmation flash
 
 
@@ -143,36 +145,33 @@ export default function AdminDashboard() {
     setFeedbackList(prev => prev.filter(f => f.id !== id));
   };
 
-  const forceEndSession = async (session: CompletedSessionRow) => {
-    if (!(session.status === "active" || session.status === "waiting")) return;
-    if (!confirm("Force end this session now?")) return;
+  const forceEndSession = async () => {
+    if (!sessionToKill) return;
+
+    const session = completedSessionsList.find((s) => s.id === sessionToKill);
+    if (!session || !(session.status === "active" || session.status === "waiting")) {
+      setSessionToKill(null);
+      return;
+    }
+
+    setForceEnding(true);
 
     const completedAt = new Date().toISOString();
     const { error } = await supabase
       .from("live_sessions")
       .update({ status: "completed", finished_at: completedAt })
-      .eq("id", session.id)
+      .eq("id", sessionToKill)
       .in("status", ["active", "waiting"]);
 
     if (error) {
       alert("Failed to force end session.");
+      setForceEnding(false);
       return;
     }
 
-    setCompletedSessionsList((prev) =>
-      prev.map((s) =>
-        s.id === session.id
-          ? { ...s, status: "completed", finished_at: completedAt }
-          : s
-      )
-    );
-
-    if (session.status === "active") {
-      setStats((prev) => ({
-        ...prev,
-        activeSessions: Math.max(0, prev.activeSessions - 1),
-      }));
-    }
+    await fetchAdminData();
+    setForceEnding(false);
+    setSessionToKill(null);
   };
 
   /**
@@ -372,7 +371,7 @@ export default function AdminDashboard() {
                         <div className="flex items-center justify-end gap-2">
                           {(sess.status === "active" || sess.status === "waiting") && (
                             <button
-                              onClick={() => void forceEndSession(sess)}
+                              onClick={() => setSessionToKill(sess.id)}
                               title="Force end session"
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-rose-500 hover:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded-lg transition-colors"
                             >
@@ -472,6 +471,34 @@ export default function AdminDashboard() {
         </motion.div>
 
       </div>
+
+      {sessionToKill && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4">
+            <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">Force End Session?</h3>
+            <p className="mt-3 text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+              Are you sure you want to end this live session? All active players will be disconnected immediately. This cannot be undone.
+            </p>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setSessionToKill(null)}
+                disabled={forceEnding}
+                className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void forceEndSession()}
+                disabled={forceEnding}
+                className="bg-rose-500 hover:bg-rose-600 text-white font-semibold py-2 px-4 rounded-lg shadow-rose-500/30 shadow-lg transition-all disabled:opacity-60"
+              >
+                {forceEnding ? "Ending..." : "Force End"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

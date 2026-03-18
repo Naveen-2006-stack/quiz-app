@@ -70,6 +70,15 @@ export default function HostRoom() {
 
   useLiveSession(sessionId, "teacher");
 
+  const touchSessionActivity = async () => {
+    if (!sessionId) return;
+    await supabase
+      .from("live_sessions")
+      .update({ last_activity_at: new Date().toISOString() })
+      .eq("id", sessionId)
+      .in("status", ["waiting", "active"]);
+  };
+
   useEffect(() => {
     latestSessionStatusRef.current = sessionStatus;
   }, [sessionStatus]);
@@ -182,6 +191,18 @@ export default function HostRoom() {
     return () => { void supabase.removeChannel(subChannel); };
   }, [sessionId, questions, currentQuestionIndex]);
 
+  // Keep session alive while host tab is open in waiting/active states.
+  useEffect(() => {
+    if (!sessionId || (sessionStatus !== "waiting" && sessionStatus !== "active")) return;
+
+    void touchSessionActivity();
+    const heartbeat = setInterval(() => {
+      void touchSessionActivity();
+    }, 5 * 60 * 1000);
+
+    return () => clearInterval(heartbeat);
+  }, [sessionId, sessionStatus]);
+
   const fetchSession = async () => {
     const { data: sData } = await supabase
       .from("live_sessions")
@@ -226,11 +247,12 @@ export default function HostRoom() {
         const { data: { session } } = await supabase.auth.getSession();
         const { error: updateError } = await supabase
           .from("live_sessions")
-          .update({ status: "active", started_at: new Date().toISOString() })
+          .update({ status: "active", started_at: new Date().toISOString(), last_activity_at: new Date().toISOString() })
           .eq("id", sessionId)
           .eq("teacher_id", session?.user?.id);
         if (updateError) throw new Error("Could not start game. Check your permissions.");
       }
+      await touchSessionActivity();
       setSessionStatus("active");
     } catch (err: any) {
       setStartError(err?.message || "Failed to start. Please try again.");
@@ -256,12 +278,12 @@ export default function HostRoom() {
     if (isLast) {
       await supabase
         .from("live_sessions")
-        .update({ status: "finished", finished_at: new Date().toISOString() })
+        .update({ status: "finished", finished_at: new Date().toISOString(), last_activity_at: new Date().toISOString() })
         .eq("id", sessionId);
     } else {
       await supabase
         .from("live_sessions")
-        .update({ current_question_index: currentQuestionIndex + 1 })
+        .update({ current_question_index: currentQuestionIndex + 1, last_activity_at: new Date().toISOString() })
         .eq("id", sessionId);
     }
     setAdvancingQuestion(false);

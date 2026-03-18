@@ -4,8 +4,13 @@ import { useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Save, ArrowLeft, User, Mail, Camera } from "lucide-react";
+import { ArrowLeft, User, Mail } from "lucide-react";
 import Link from "next/link";
+
+const avatarSeeds = ["Felix", "Aneka", "Oliver", "Zoe", "Leo", "Mia", "Max", "Lily"];
+
+const getAvatarUrl = (seed: string) =>
+  `https://api.dicebear.com/7.x/adventurer/svg?seed=${seed}&backgroundColor=c0aede,b6e3f4`;
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -17,6 +22,7 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [selectedAvatar, setSelectedAvatar] = useState<string>(getAvatarUrl(avatarSeeds[0]));
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -28,21 +34,25 @@ export default function ProfilePage() {
   }, []);
 
   const fetchProfile = async (userId: string, authUser: any) => {
-    const { data } = await supabase.from("profiles").select("display_name").eq("id", userId).maybeSingle();
+    const { data } = await supabase.from("profiles").select("display_name, avatar_url").eq("id", userId).maybeSingle();
     setDisplayName(data?.display_name || authUser.user_metadata?.full_name || "");
+    setSelectedAvatar(data?.avatar_url || authUser.user_metadata?.avatar_url || getAvatarUrl(avatarSeeds[0]));
     setLoading(false);
   };
 
   const handleSave = async () => {
     if (!user || !displayName.trim()) return;
     setSaving(true);
-    await supabase.from("profiles").update({ display_name: displayName.trim() }).eq("id", user.id);
+    await supabase
+      .from("profiles")
+      .update({ display_name: displayName.trim(), avatar_url: selectedAvatar })
+      .eq("id", user.id);
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
 
-  const avatarUrl = user?.user_metadata?.avatar_url;
+  const avatarUrl = selectedAvatar;
   const initials = displayName ? displayName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase() : "?";
 
   return (
@@ -59,7 +69,7 @@ export default function ProfilePage() {
 
         {/* Avatar */}
         <div className="px-8 pb-8">
-          <div className="relative -mt-14 mb-6 w-24 h-24">
+          <div className="-mt-14 mb-6 w-24 h-24">
             {avatarUrl ? (
               <img src={avatarUrl} alt="Avatar" className="w-24 h-24 rounded-2xl object-cover ring-4 ring-white dark:ring-slate-800 shadow-xl" />
             ) : (
@@ -67,9 +77,6 @@ export default function ProfilePage() {
                 {initials}
               </div>
             )}
-            <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-lg bg-slate-200 dark:bg-slate-600 flex items-center justify-center">
-              <Camera size={14} className="text-slate-500 dark:text-slate-300" />
-            </div>
           </div>
 
           {loading ? (
@@ -105,6 +112,37 @@ export default function ProfilePage() {
                   className="w-full px-4 py-3 rounded-xl bg-gray-100 dark:bg-slate-900/50 border border-gray-200 dark:border-white/5 text-slate-500 dark:text-slate-500 font-medium cursor-not-allowed outline-none"
                 />
                 <p className="text-xs text-slate-400 mt-1.5">Email is managed by Google and cannot be changed here.</p>
+              </div>
+
+              {/* Avatar Selector */}
+              <div>
+                <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-3">Choose Your Avatar</h3>
+                <div className="grid grid-cols-4 sm:grid-cols-8 gap-3">
+                  {avatarSeeds.map((seed) => {
+                    const avatarOptionUrl = getAvatarUrl(seed);
+                    const isSelected = selectedAvatar === avatarOptionUrl;
+
+                    return (
+                      <button
+                        key={seed}
+                        type="button"
+                        onClick={() => setSelectedAvatar(avatarOptionUrl)}
+                        className={`rounded-xl transition-transform hover:scale-110 focus:outline-none ${
+                          isSelected
+                            ? "ring-4 ring-indigo-500 ring-offset-2 ring-offset-white dark:ring-offset-slate-800"
+                            : "ring-2 ring-transparent"
+                        }`}
+                        title={`Select ${seed}`}
+                      >
+                        <img
+                          src={avatarOptionUrl}
+                          alt={`${seed} avatar`}
+                          className="w-full aspect-square rounded-xl object-cover border border-slate-200 dark:border-slate-700 bg-white"
+                        />
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Save button */}
