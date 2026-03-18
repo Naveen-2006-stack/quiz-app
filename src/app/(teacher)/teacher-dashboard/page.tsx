@@ -182,7 +182,7 @@ export default function TeacherDashboard() {
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           onClick={createNewQuiz}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-lg shadow-indigo-600/20 transition-all"
+          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-semibold shadow-lg shadow-indigo-500/30 transition-all"
         >
           <Plus size={20} />
           Create Quiz
@@ -193,11 +193,11 @@ export default function TeacherDashboard() {
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[1, 2, 3].map(i => (
-            <div key={i} className="h-64 rounded-3xl bg-white dark:bg-slate-800 shadow-sm border border-gray-100 dark:border-white/5 animate-pulse" />
+            <div key={i} className="h-64 rounded-3xl bg-white dark:bg-slate-800 shadow-sm border border-slate-200/60 dark:border-white/5 animate-pulse" />
           ))}
         </div>
       ) : quizzes.length === 0 ? (
-        <div className="text-center py-20 bg-white dark:bg-slate-800 rounded-3xl border border-dashed border-gray-200 dark:border-white/10">
+        <div className="text-center py-20 bg-white dark:bg-slate-800 rounded-3xl border border-dashed border-slate-200 dark:border-white/10 shadow-sm">
           <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
             <Plus className="text-indigo-600 dark:text-indigo-400" size={32} />
           </div>
@@ -217,9 +217,9 @@ export default function TeacherDashboard() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.9 }}
                 transition={{ duration: 0.3, delay: idx * 0.05 }}
-                className="group relative overflow-hidden rounded-3xl p-6 bg-white/70 dark:bg-slate-900/50 backdrop-blur-xl border border-white/20 dark:border-slate-800/50 hover:border-indigo-200 dark:hover:border-indigo-500/50 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_0_20px_rgba(99,102,241,0.15)] dark:hover:shadow-[0_0_20px_rgba(99,102,241,0.2)]"
+                className="group relative overflow-hidden rounded-3xl p-6 bg-white dark:bg-slate-900/50 backdrop-blur-xl border border-slate-200/60 dark:border-slate-800/50 shadow-sm hover:border-indigo-200 dark:hover:border-indigo-500/50 transition-all duration-300 hover:-translate-y-1 hover:shadow-md dark:hover:shadow-[0_0_20px_rgba(99,102,241,0.2)]"
               >
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/50 via-white/20 to-transparent dark:from-indigo-300/10 dark:via-white/[0.04] dark:to-transparent opacity-70" />
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-indigo-50/70 via-white to-transparent dark:from-indigo-300/10 dark:via-white/[0.04] dark:to-transparent opacity-80" />
 
                 <div className="relative z-10 flex justify-between items-start mb-4">
                   <div className="flex-1">
@@ -233,7 +233,7 @@ export default function TeacherDashboard() {
                 </div>
 
                 {/* Stats Row */}
-                <div className="relative z-10 flex items-center gap-4 py-4 border-y border-gray-100 dark:border-white/10 mb-6">
+                <div className="relative z-10 flex items-center gap-4 py-4 border-y border-slate-200/70 dark:border-white/10 mb-6">
                   <div className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300">
                     <Hash size={16} className="text-indigo-500" />
                     <span className="font-semibold">{quiz._count?.questions || 0}</span> questions
@@ -251,14 +251,14 @@ export default function TeacherDashboard() {
                     <motion.button 
                       onClick={() => startSession(quiz.id)}
                       whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                      className="w-full flex justify-center items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white py-2.5 rounded-xl font-medium transition-colors"
+                      className="w-full flex justify-center items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white py-2.5 rounded-xl font-semibold shadow-md shadow-emerald-500/30 transition-colors"
                     >
                       <Play size={18} /> Host Live
                     </motion.button>
                     <motion.button
                       onClick={() => openReports(quiz)}
                       whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                      className="w-full flex justify-center items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-100 py-2.5 rounded-xl font-medium transition-colors"
+                      className="w-full flex justify-center items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-100 py-2.5 rounded-xl font-semibold transition-colors"
                     >
                       <BarChart3 size={18} /> Reports
                     </motion.button>
@@ -297,7 +297,7 @@ export default function TeacherDashboard() {
               exit={{ opacity: 0, y: 12 }}
               transition={{ duration: 0.2 }}
               onClick={(e) => e.stopPropagation()}
-              className="mx-auto w-full max-w-6xl rounded-3xl border border-gray-200 bg-white text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-50 shadow-2xl"
+              className="mx-auto w-full max-w-6xl rounded-3xl border border-slate-200/70 bg-white text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-50 shadow-xl"
             >
               <div className="flex items-center justify-between px-6 py-5 border-b border-gray-200 dark:border-slate-800">
                 <div>

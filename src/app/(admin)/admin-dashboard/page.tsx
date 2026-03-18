@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { motion } from "framer-motion";
-import { Users, Server, BookOpen, Trash2, Ban, RefreshCw, LayoutDashboard, ShieldCheck, Activity, FileText, Eye, EyeOff, MessageSquare } from "lucide-react";
+import { Users, Server, BookOpen, Trash2, Ban, RefreshCw, LayoutDashboard, ShieldCheck, Activity, FileText, Eye, EyeOff, MessageSquare, Slash } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -143,6 +143,38 @@ export default function AdminDashboard() {
     setFeedbackList(prev => prev.filter(f => f.id !== id));
   };
 
+  const forceEndSession = async (session: CompletedSessionRow) => {
+    if (!(session.status === "active" || session.status === "waiting")) return;
+    if (!confirm("Force end this session now?")) return;
+
+    const completedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from("live_sessions")
+      .update({ status: "completed", finished_at: completedAt })
+      .eq("id", session.id)
+      .in("status", ["active", "waiting"]);
+
+    if (error) {
+      alert("Failed to force end session.");
+      return;
+    }
+
+    setCompletedSessionsList((prev) =>
+      prev.map((s) =>
+        s.id === session.id
+          ? { ...s, status: "completed", finished_at: completedAt }
+          : s
+      )
+    );
+
+    if (session.status === "active") {
+      setStats((prev) => ({
+        ...prev,
+        activeSessions: Math.max(0, prev.activeSessions - 1),
+      }));
+    }
+  };
+
   /**
    * VIP Ghost Mode: explicitly toggle the visibility of correct answers.
    */
@@ -163,12 +195,12 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="min-h-screen transition-colors p-4 md:p-8">
+    <div className="min-h-screen transition-colors p-4 sm:p-6 md:p-8">
       
       {/* Admin Navbar */}
-      <div className="max-w-7xl mx-auto flex items-center justify-between mb-8 bg-white/70 dark:bg-slate-900/50 backdrop-blur-xl p-4 px-6 rounded-2xl border border-white/20 dark:border-slate-800/50 shadow-[0_10px_30px_rgba(15,23,42,0.08)] dark:shadow-[0_10px_40px_rgba(2,6,23,0.45)]">
+      <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8 bg-white dark:bg-slate-900/50 backdrop-blur-xl p-4 px-5 sm:px-6 rounded-2xl border border-slate-200/60 dark:border-slate-800/50 shadow-sm dark:shadow-[0_10px_40px_rgba(2,6,23,0.45)]">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-600/20">
+          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-600/20 shrink-0">
             <ShieldCheck className="text-white" size={24} />
           </div>
           <div>
@@ -176,7 +208,7 @@ export default function AdminDashboard() {
             <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Control Panel</p>
           </div>
         </div>
-        <div className="flex gap-4">
+        <div className="flex gap-3 flex-wrap">
           <button onClick={fetchAdminData} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-indigo-600 bg-gray-50 hover:bg-indigo-50 dark:bg-slate-900/50 dark:hover:bg-indigo-500/10 rounded-lg transition-colors border border-gray-200 dark:border-white/5">
             <RefreshCw size={16} /> Refresh
           </button>
@@ -190,7 +222,7 @@ export default function AdminDashboard() {
         
         {/* Top-Level Metrics Row */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="p-6 bg-white/70 dark:bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-white/20 dark:border-slate-800/50 relative overflow-hidden group transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_0_20px_rgba(99,102,241,0.15)] dark:hover:shadow-[0_0_20px_rgba(99,102,241,0.2)]">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="p-6 bg-white dark:bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-slate-200/60 dark:border-slate-800/50 shadow-sm relative overflow-hidden group transition-all duration-300 hover:-translate-y-1 hover:shadow-md dark:hover:shadow-[0_0_20px_rgba(99,102,241,0.2)]">
             <div className="absolute top-0 right-0 -mr-4 -mt-4 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition-all duration-500" />
             <div className="flex items-center justify-between mb-4 relative z-10">
               <span className="text-slate-500 dark:text-slate-400 font-semibold tracking-wide text-sm">TOTAL USERS</span>
@@ -201,7 +233,7 @@ export default function AdminDashboard() {
             </div>
           </motion.div>
 
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="p-6 bg-white/70 dark:bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-white/20 dark:border-slate-800/50 relative overflow-hidden group transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_0_20px_rgba(99,102,241,0.15)] dark:hover:shadow-[0_0_20px_rgba(99,102,241,0.2)]">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="p-6 bg-white dark:bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-slate-200/60 dark:border-slate-800/50 shadow-sm relative overflow-hidden group transition-all duration-300 hover:-translate-y-1 hover:shadow-md dark:hover:shadow-[0_0_20px_rgba(99,102,241,0.2)]">
             <div className="absolute top-0 right-0 -mr-4 -mt-4 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-all duration-500" />
             <div className="flex items-center justify-between mb-4 relative z-10">
               <span className="text-slate-500 dark:text-slate-400 font-semibold tracking-wide text-sm">ACTIVE SESSIONS</span>
@@ -212,7 +244,7 @@ export default function AdminDashboard() {
             </div>
           </motion.div>
 
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="p-6 bg-white/70 dark:bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-white/20 dark:border-slate-800/50 relative overflow-hidden group transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_0_20px_rgba(99,102,241,0.15)] dark:hover:shadow-[0_0_20px_rgba(99,102,241,0.2)]">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="p-6 bg-white dark:bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-slate-200/60 dark:border-slate-800/50 shadow-sm relative overflow-hidden group transition-all duration-300 hover:-translate-y-1 hover:shadow-md dark:hover:shadow-[0_0_20px_rgba(99,102,241,0.2)]">
             <div className="absolute top-0 right-0 -mr-4 -mt-4 w-32 h-32 bg-purple-500/10 rounded-full blur-2xl group-hover:bg-purple-500/20 transition-all duration-500" />
             <div className="flex items-center justify-between mb-4 relative z-10">
               <span className="text-slate-500 dark:text-slate-400 font-semibold tracking-wide text-sm">TOTAL QUIZZES</span>
@@ -228,13 +260,14 @@ export default function AdminDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           
           {/* Recent Users Table */}
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="bg-white/70 dark:bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-white/20 dark:border-slate-800/50 overflow-hidden flex flex-col h-[500px]">
-            <div className="p-6 border-b border-gray-100 dark:border-white/5">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="bg-white dark:bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-slate-200/60 dark:border-slate-800/50 shadow-sm overflow-hidden flex flex-col h-[500px]">
+            <div className="p-5 sm:p-6 border-b border-gray-100 dark:border-white/5">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2"><Server size={20} className="text-indigo-500"/> User Management</h2>
             </div>
             <div className="flex-1 overflow-auto">
+              <div className="w-full overflow-x-auto whitespace-nowrap">
               <table className="w-full text-left border-collapse">
-                <thead className="sticky top-0 bg-gray-50/95 dark:bg-slate-900/95 backdrop-blur z-10 shadow-sm border-b border-gray-100 dark:border-white/5">
+                <thead className="sticky top-0 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur z-10 shadow-sm border-b border-slate-200/70 dark:border-white/5">
                   <tr>
                     <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">User</th>
                     <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Role</th>
@@ -253,8 +286,8 @@ export default function AdminDashboard() {
                       <td className="px-6 py-4">
                         <span className={cn("px-3 py-1 text-xs font-bold rounded-full border", 
                           user.role === 'admin' 
-                            ? "bg-amber-500/20 text-amber-400 border-amber-500/50" 
-                            : "bg-slate-700/50 text-slate-300 border-slate-600"
+                            ? "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/20 dark:text-amber-400 dark:border-amber-500/50" 
+                            : "bg-blue-100 text-blue-700 border-blue-200 dark:bg-slate-700/50 dark:text-slate-300 dark:border-slate-600"
                         )}>
                           {user.role}
                         </span>
@@ -290,40 +323,62 @@ export default function AdminDashboard() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           </motion.div>
 
           {/* Global Completed Sessions Table */}
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-slate-800/50 overflow-hidden flex flex-col h-[500px]">
-            <div className="p-6 border-b border-gray-100 dark:border-white/5">
-              <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2"><Activity size={20} className="text-emerald-500"/> Session Management</h2>
-              <p className="text-xs mt-1 text-slate-400">Global live and completed sessions across the platform</p>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="bg-white dark:bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-slate-200/60 dark:border-slate-800/50 shadow-sm overflow-hidden flex flex-col h-[500px]">
+            <div className="p-5 sm:p-6 border-b border-gray-100 dark:border-white/5">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2"><Activity size={20} className="text-emerald-500"/> Session Management</h2>
+              <p className="text-xs mt-1 text-slate-500 dark:text-slate-400">Global live and completed sessions across the platform</p>
             </div>
             <div className="flex-1 overflow-auto">
+              <div className="w-full overflow-x-auto whitespace-nowrap">
               <table className="w-full text-left border-collapse">
-                <thead className="sticky top-0 bg-slate-900/95 backdrop-blur z-10 shadow-sm border-b border-slate-800/60">
+                <thead className="sticky top-0 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur z-10 shadow-sm border-b border-slate-200/70 dark:border-slate-800/60">
                   <tr>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Quiz Title</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Host Name</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Completed At</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Action</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Quiz Title</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Host Name</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Completed At</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60">
+                <tbody className="divide-y divide-slate-200/70 dark:divide-slate-800/60">
                   {completedSessionsList.map((sess) => (
-                    <tr key={sess.id} className="hover:bg-slate-800/70 transition-colors group">
+                    <tr key={sess.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/70 transition-colors group">
                       <td className="px-6 py-4">
-                        <div className="font-semibold text-slate-100 truncate max-w-[220px]">{sess.quizzes?.title || "Unknown Quiz"}</div>
+                        <div className="font-semibold text-slate-900 dark:text-slate-100 truncate max-w-[220px]">{sess.quizzes?.title || "Unknown Quiz"}</div>
                         <div className="text-[11px] text-slate-500 font-mono mt-1">{sess.id.slice(0, 8)}...</div>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="text-slate-200 font-medium">{sess.host_name || "Unknown Host"}</div>
+                        <div className="text-slate-700 dark:text-slate-200 font-medium">{sess.host_name || "Unknown Host"}</div>
                       </td>
-                      <td className="px-6 py-4 text-slate-300 text-sm uppercase">{sess.status}</td>
-                      <td className="px-6 py-4 text-slate-300 text-sm">{sess.finished_at ? new Date(sess.finished_at).toLocaleString() : sess.started_at ? new Date(sess.started_at).toLocaleString() : "N/A"}</td>
+                      <td className="px-6 py-4 text-sm uppercase">
+                        <span className={cn(
+                          "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold border",
+                          sess.status === "active"
+                            ? "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-400 dark:border-emerald-500/30"
+                            : sess.status === "waiting"
+                            ? "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/20 dark:text-amber-400 dark:border-amber-500/30"
+                            : "bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-500/20 dark:text-indigo-300 dark:border-indigo-500/30"
+                        )}>
+                          {sess.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-slate-600 dark:text-slate-300 text-sm">{sess.finished_at ? new Date(sess.finished_at).toLocaleString() : sess.started_at ? new Date(sess.started_at).toLocaleString() : "N/A"}</td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
+                          {(sess.status === "active" || sess.status === "waiting") && (
+                            <button
+                              onClick={() => void forceEndSession(sess)}
+                              title="Force end session"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-rose-500 hover:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded-lg transition-colors"
+                            >
+                              <Slash size={14} /> Force End
+                            </button>
+                          )}
                           <Link
                             href={`/dashboard/reports/${sess.id}`}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 rounded-lg transition-colors"
@@ -350,33 +405,35 @@ export default function AdminDashboard() {
                   )}
                 </tbody>
               </table>
+              </div>
             </div>
           </motion.div>
 
         </div>
         
         {/* Course Feedback Table */}
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-slate-800/50 overflow-hidden flex flex-col mb-10">
-          <div className="p-6 border-b border-gray-100 dark:border-white/5">
-            <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2"><MessageSquare size={20} className="text-pink-500"/> User Feedback</h2>
-            <p className="text-xs mt-1 text-slate-400">Recent feedback submitted by students</p>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="bg-white dark:bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-slate-200/60 dark:border-slate-800/50 shadow-sm overflow-hidden flex flex-col mb-10">
+          <div className="p-5 sm:p-6 border-b border-gray-100 dark:border-white/5">
+            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2"><MessageSquare size={20} className="text-pink-500"/> User Feedback</h2>
+            <p className="text-xs mt-1 text-slate-500 dark:text-slate-400">Recent feedback submitted by students</p>
           </div>
           <div className="flex-1 overflow-auto max-h-[500px]">
+            <div className="w-full overflow-x-auto whitespace-nowrap">
              <table className="w-full text-left border-collapse">
-                <thead className="sticky top-0 bg-slate-900/95 backdrop-blur z-10 shadow-sm border-b border-slate-800/60">
+                <thead className="sticky top-0 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur z-10 shadow-sm border-b border-slate-200/70 dark:border-slate-800/60">
                   <tr>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">User</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Rating</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider w-1/2">Feedback</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Date</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Action</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">User</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Rating</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-1/2">Feedback</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60">
+                <tbody className="divide-y divide-slate-200/70 dark:divide-slate-800/60">
                   {feedbackList.map((f) => (
-                    <tr key={f.id} className="hover:bg-slate-800/70 transition-colors group">
+                    <tr key={f.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/70 transition-colors group">
                       <td className="px-6 py-4">
-                        <div className="font-semibold text-slate-100">{f.display_name}</div>
+                        <div className="font-semibold text-slate-900 dark:text-slate-100">{f.display_name}</div>
                         <div className="text-[10px] text-slate-500 font-mono mt-0.5">{f.id.slice(0, 8)}...</div>
                       </td>
                       <td className="px-6 py-4">
@@ -384,7 +441,7 @@ export default function AdminDashboard() {
                           {f.rating} / 5
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-slate-300 text-sm">
+                      <td className="px-6 py-4 text-slate-700 dark:text-slate-300 text-sm">
                         <p className="line-clamp-3">{f.message}</p>
                       </td>
                       <td className="px-6 py-4 text-slate-400 text-sm">
@@ -410,6 +467,7 @@ export default function AdminDashboard() {
                   )}
                 </tbody>
              </table>
+             </div>
           </div>
         </motion.div>
 

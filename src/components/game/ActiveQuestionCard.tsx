@@ -7,10 +7,10 @@ import { CheckCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 const OPTION_COLORS = [
-  { bg: 'bg-rose-500', hover: 'hover:bg-rose-600', border: 'border-rose-400', text: 'text-white', label: 'bg-rose-600' },
-  { bg: 'bg-blue-500', hover: 'hover:bg-blue-600', border: 'border-blue-400', text: 'text-white', label: 'bg-blue-600' },
-  { bg: 'bg-amber-500', hover: 'hover:bg-amber-600', border: 'border-amber-400', text: 'text-white', label: 'bg-amber-600' },
-  { bg: 'bg-emerald-500', hover: 'hover:bg-emerald-600', border: 'border-emerald-400', text: 'text-white', label: 'bg-emerald-600' },
+  { bg: 'bg-rose-500', hover: 'hover:bg-rose-600', border: 'border-rose-400', text: 'text-white', label: 'bg-rose-600', depth: 'shadow-[0_5px_0_rgba(190,24,93,0.45)] dark:shadow-none' },
+  { bg: 'bg-blue-500', hover: 'hover:bg-blue-600', border: 'border-blue-400', text: 'text-white', label: 'bg-blue-600', depth: 'shadow-[0_5px_0_rgba(29,78,216,0.45)] dark:shadow-none' },
+  { bg: 'bg-amber-500', hover: 'hover:bg-amber-600', border: 'border-amber-400', text: 'text-white', label: 'bg-amber-600', depth: 'shadow-[0_5px_0_rgba(180,83,9,0.45)] dark:shadow-none' },
+  { bg: 'bg-emerald-500', hover: 'hover:bg-emerald-600', border: 'border-emerald-400', text: 'text-white', label: 'bg-emerald-600', depth: 'shadow-[0_5px_0_rgba(4,120,87,0.45)] dark:shadow-none' },
 ];
 
 const OPTION_LABELS = ['A', 'B', 'C', 'D'];
@@ -273,9 +273,10 @@ export const ActiveQuestionCard = ({
                         'relative w-full text-left rounded-[1.5rem] font-bold transition-all duration-200 border-4 min-h-[48px]',
                         isTrueFalse ? 'p-8 text-3xl' : 'p-5 text-lg',
                         color.bg, color.hover, color.text,
+                        color.depth,
                         isSelected
-                          ? `${color.border} ring-4 ring-white/40 scale-[1.02] shadow-xl`
-                          : 'border-transparent opacity-70 hover:opacity-100'
+                          ? `${color.border} ring-4 ring-white/40 scale-[1.02] shadow-xl translate-y-[1px]`
+                          : 'border-transparent opacity-80 hover:opacity-100'
                       )}
                     >
                       <span className="flex items-center gap-4">

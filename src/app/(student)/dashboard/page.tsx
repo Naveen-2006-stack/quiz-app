@@ -227,23 +227,23 @@ export default function UnifiedDashboard() {
   const greeting = profile?.display_name ? `Hi, ${profile.display_name.split(" ")[0]} 👋` : "Your Dashboard";
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-10 space-y-10">
+    <div className="max-w-5xl mx-auto px-4 py-6 sm:py-10 space-y-8 sm:space-y-10">
       {/* Hero greeting */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">{greeting}</h1>
+          <h1 className="text-3xl md:text-4xl font-black text-slate-900 dark:text-white tracking-tight">{greeting}</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-1">Everything in one place.</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           <Link
             href="/join"
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl border-2 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-semibold hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-all"
+            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold shadow-lg shadow-emerald-500/30 transition-all"
           >
             <MonitorPlay size={18} /> Join Game
           </Link>
           <button
             onClick={createNewQuiz}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-lg shadow-indigo-600/20 transition-all"
+            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-lg shadow-indigo-500/30 transition-all"
           >
             <Plus size={18} /> Create Quiz
           </button>
@@ -251,7 +251,7 @@ export default function UnifiedDashboard() {
       </div>
 
       {/* Tabs */}
-      <div className="flex bg-gray-100 dark:bg-slate-800/60 p-1 rounded-2xl w-fit">
+      <div className="flex bg-slate-100 dark:bg-slate-800/60 p-1 rounded-2xl w-fit border border-slate-200/70 dark:border-slate-700/70">
         {(['history', 'hosted'] as const).map((tab) => (
           <button
             key={tab}
@@ -273,15 +273,15 @@ export default function UnifiedDashboard() {
           {loadingHistory ? (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="h-20 rounded-2xl bg-slate-100 dark:bg-slate-800 animate-pulse" />
+                <div key={i} className="h-20 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-white/5 shadow-sm animate-pulse" />
               ))}
             </div>
           ) : history.length === 0 ? (
-            <div className="text-center py-20 bg-white dark:bg-slate-800 rounded-3xl border-2 border-dashed border-gray-200 dark:border-white/10">
+            <div className="text-center py-20 bg-white dark:bg-slate-800 rounded-3xl border-2 border-dashed border-slate-200 dark:border-white/10 shadow-sm">
               <div className="text-5xl mb-4">🎯</div>
               <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">No games yet</h3>
               <p className="text-slate-500 dark:text-slate-400 mb-6">Join a quiz to see your history here.</p>
-              <Link href="/join" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold transition-all">
+              <Link href="/join" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold shadow-lg shadow-emerald-500/30 transition-all">
                 <MonitorPlay size={18} /> Join a Game
               </Link>
             </div>
@@ -295,7 +295,7 @@ export default function UnifiedDashboard() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: idx * 0.04 }}
-                  className="flex items-center gap-5 bg-white dark:bg-slate-800 rounded-2xl px-6 py-4 shadow-sm border border-gray-100 dark:border-white/5"
+                  className="flex items-center gap-5 bg-white dark:bg-slate-800 rounded-2xl px-6 py-4 shadow-sm border border-slate-200/60 dark:border-white/5"
                 >
                   <div className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center shrink-0">
                     <Award className="text-indigo-600 dark:text-indigo-400" size={22} />
@@ -336,16 +336,16 @@ export default function UnifiedDashboard() {
           <AnimatePresence>
             {loadingQuizzes
               ? [1, 2, 3].map((i) => (
-                  <div key={i} className="h-24 rounded-2xl bg-slate-100 dark:bg-slate-800 animate-pulse" />
+                  <div key={i} className="h-24 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-white/5 shadow-sm animate-pulse" />
                 ))
               : quizzes.length === 0 ? (
-                  <div className="text-center py-20 bg-white dark:bg-slate-800 rounded-3xl border-2 border-dashed border-gray-200 dark:border-white/10">
+                  <div className="text-center py-20 bg-white dark:bg-slate-800 rounded-3xl border-2 border-dashed border-slate-200 dark:border-white/10 shadow-sm">
                     <div className="text-5xl mb-4">📝</div>
                     <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">No quizzes yet</h3>
                     <p className="text-slate-500 dark:text-slate-400 mb-6">Create your first quiz and start hosting!</p>
                     <button
                       onClick={createNewQuiz}
-                      className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold transition-all shadow-lg shadow-indigo-600/20"
+                      className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold transition-all shadow-lg shadow-indigo-500/30"
                     >
                       <Plus size={18} /> Create Quiz
                     </button>
@@ -358,7 +358,7 @@ export default function UnifiedDashboard() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.97 }}
                     transition={{ delay: idx * 0.04 }}
-                    className="group flex items-center gap-5 bg-white dark:bg-slate-800 rounded-2xl px-6 py-5 shadow-sm border border-gray-100 dark:border-white/5 hover:border-indigo-200 dark:hover:border-indigo-500/30 transition-all"
+                    className="group flex items-center gap-5 bg-white dark:bg-slate-800 rounded-2xl px-6 py-5 shadow-sm border border-slate-200/60 dark:border-white/5 hover:border-indigo-200 dark:hover:border-indigo-500/30 transition-all"
                   >
                     <div className="flex-1 min-w-0">
                       <h3 className="font-bold text-slate-900 dark:text-white text-lg truncate">{quiz.title}</h3>
@@ -367,7 +367,7 @@ export default function UnifiedDashboard() {
                         <span className="flex items-center gap-1"><Clock size={11} /> {new Date(quiz.created_at).toLocaleDateString()}</span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
                       <Link href={`/quiz/${quiz.id}/edit`} className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors">
                         <Edit3 size={18} />
                       </Link>
@@ -377,7 +377,7 @@ export default function UnifiedDashboard() {
                     </div>
                     <button
                       onClick={() => startSession(quiz.id)}
-                      className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm shadow-md shadow-emerald-500/30 transition-all"
+                      className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-lg shadow-indigo-500/30 transition-all"
                     >
                       <Play size={16} /> Host Live
                     </button>

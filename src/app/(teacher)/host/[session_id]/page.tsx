@@ -55,6 +55,8 @@ export default function HostRoom() {
   const [submissionCount, setSubmissionCount] = useState(0);
 
   const controlChannelRef = useRef<any>(null);
+  const latestSessionStatusRef = useRef<string>("waiting");
+  const hasAutoCompletedRef = useRef(false);
 
   // Zustand game store
   const participantsMap = useGameStore((s) => s.participants);
@@ -67,6 +69,38 @@ export default function HostRoom() {
   const removeParticipant = useGameStore((s) => s.removeParticipant);
 
   useLiveSession(sessionId, "teacher");
+
+  useEffect(() => {
+    latestSessionStatusRef.current = sessionStatus;
+  }, [sessionStatus]);
+
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const completeSessionIfOpen = () => {
+      if (hasAutoCompletedRef.current) return;
+      const status = latestSessionStatusRef.current;
+      if (status !== "active" && status !== "waiting") return;
+
+      hasAutoCompletedRef.current = true;
+      void supabase
+        .from("live_sessions")
+        .update({ status: "completed", finished_at: new Date().toISOString() })
+        .eq("id", sessionId)
+        .in("status", ["active", "waiting"]);
+    };
+
+    const onBeforeUnload = () => {
+      completeSessionIfOpen();
+    };
+
+    window.addEventListener("beforeunload", onBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      completeSessionIfOpen();
+    };
+  }, [sessionId]);
 
   // Initial data fetch
   useEffect(() => {
@@ -591,13 +625,13 @@ export default function HostRoom() {
       {/* Join code display */}
       <div className="text-center mb-12">
         <p className="text-slate-500 dark:text-slate-400 font-medium mb-3">Students join at <strong className="text-slate-900 dark:text-white">levelnlearn.vercel.app</strong></p>
-        <div className="inline-flex items-center gap-4 bg-white dark:bg-slate-800 p-4 pl-8 rounded-full shadow-2xl shadow-indigo-500/10 border border-gray-100 dark:border-white/10">
+        <div className="inline-flex items-center gap-4 bg-white/70 dark:bg-slate-800 p-4 pl-8 rounded-full shadow-xl border border-white dark:border-white/10 backdrop-blur-md">
           <span className="text-6xl font-mono tracking-[0.2em] font-bold text-slate-800 dark:text-white">
             {sessionInfo?.join_code || "------"}
           </span>
           <button
             onClick={copyPin}
-            className="w-16 h-16 flex items-center justify-center rounded-full bg-indigo-50 hover:bg-indigo-100 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400 transition-colors"
+            className="w-16 h-16 flex items-center justify-center rounded-full bg-white/80 hover:bg-white text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400 transition-colors border border-indigo-100/80 dark:border-transparent"
           >
             {copied ? <Check size={28} /> : <Copy size={28} />}
           </button>
@@ -606,7 +640,7 @@ export default function HostRoom() {
 
       {/* Player count + Start button */}
       <div className="flex justify-between items-end mb-6">
-        <div className="flex items-center gap-3 bg-white dark:bg-slate-800 px-6 py-3 rounded-2xl shadow-sm border border-gray-100 dark:border-white/10">
+        <div className="flex items-center gap-3 bg-white dark:bg-slate-800 px-6 py-3 rounded-2xl shadow-sm border border-slate-200/60 dark:border-white/10">
           <Users className="text-indigo-500" size={24} />
           <span className="text-2xl font-bold text-slate-900 dark:text-white">{participantsList.length}</span>
           <span className="text-slate-500 dark:text-slate-400 font-medium">Players Connected</span>
@@ -629,7 +663,7 @@ export default function HostRoom() {
       )}
 
       {/* Player grid */}
-      <div className="bg-white/50 dark:bg-slate-800/50 rounded-3xl p-8 min-h-[380px] border border-gray-200 dark:border-white/5">
+      <div className="bg-white dark:bg-slate-800/50 rounded-3xl p-8 min-h-[380px] border border-slate-200/60 dark:border-white/5 shadow-sm">
         <AnimatePresence>
           {participantsList.length === 0 ? (
             <motion.div

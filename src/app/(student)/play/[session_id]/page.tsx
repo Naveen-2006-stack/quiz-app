@@ -598,7 +598,7 @@ export default function StudentPlayRoom() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex flex-col p-4 md:p-8 pt-20 md:pt-24 select-none">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex flex-col p-4 md:p-8 pt-20 md:pt-24 select-none">
 
       {/* ── Universal floating emoji overlay (mirrors Host screen) ── */}
       <div className="pointer-events-none fixed inset-0 z-[60] overflow-hidden">
@@ -649,9 +649,9 @@ export default function StudentPlayRoom() {
         {/* WAITING: lobby */}
         {sessionStatus === "waiting" && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
-            <div className="inline-flex items-center justify-center gap-2 bg-slate-800/60 backdrop-blur-md border border-slate-700/50 px-6 py-3 rounded-full shadow-xl mb-8">
-              <span className="text-sm font-semibold uppercase tracking-widest text-slate-300">GAME PIN:</span>
-              <span className="font-mono text-2xl font-black tracking-[0.2em] text-indigo-400">
+            <div className="inline-flex items-center justify-center gap-2 bg-white/70 dark:bg-slate-800/60 backdrop-blur-md border border-white dark:border-slate-700/50 px-6 py-3 rounded-full shadow-xl mb-8">
+              <span className="text-sm font-semibold uppercase tracking-widest text-slate-600 dark:text-slate-300">GAME PIN:</span>
+              <span className="font-mono text-2xl font-black tracking-[0.2em] text-indigo-600 dark:text-indigo-400">
                 {sessionInfo?.join_code || "------"}
               </span>
             </div>
@@ -671,7 +671,7 @@ export default function StudentPlayRoom() {
               ))}
             </div>
 
-            <div className="fixed bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-slate-800/60 backdrop-blur-md border border-slate-700/50 px-6 py-3 rounded-full shadow-2xl z-40">
+            <div className="fixed bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-white/70 dark:bg-slate-800/60 backdrop-blur-md border border-white dark:border-slate-700/50 px-6 py-3 rounded-full shadow-xl z-40">
               {["🔥", "👏", "😂", "🚀"].map((emoji) => (
                 <button
                   key={emoji}

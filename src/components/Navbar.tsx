@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useRouter, usePathname } from "next/navigation";
-import { LogOut, Settings, MonitorPlay, Sun, Moon, MessageSquare, LayoutDashboard, X } from "lucide-react";
+import {
+  LogOut, Settings, MonitorPlay, Sun, Moon, MessageSquare,
+  LayoutDashboard, X, Menu, Plus,
+} from "lucide-react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import Image from "next/image";
@@ -12,15 +15,17 @@ import { motion, AnimatePresence } from "framer-motion";
 export default function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
-  const { theme, setTheme } = useTheme();
+  const { theme, resolvedTheme, setTheme } = useTheme();
 
   const [profile, setProfile] = useState<{ display_name: string; role?: string; avatar_url?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
   const [authUser, setAuthUser] = useState<any>(null);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const [supabase] = useState(() => createSupabaseBrowserClient());
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -32,6 +37,23 @@ export default function Navbar() {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
+  // Close mobile menu on outside click
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target as Node)) {
+        setMobileOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [mobileOpen]);
 
   const handleSessionChange = async (user: any) => {
     try {
@@ -54,6 +76,11 @@ export default function Navbar() {
     router.push("/login");
   };
 
+  const handleToggleTheme = () => {
+    const activeTheme = resolvedTheme ?? theme;
+    setTheme(activeTheme === "dark" ? "light" : "dark");
+  };
+
   const hiddenPaths = ["/", "/login"];
   if (hiddenPaths.includes(pathname)) return null;
 
@@ -64,7 +91,10 @@ export default function Navbar() {
 
   return (
     <>
-      <nav className="sticky top-3 z-50 mx-3 sm:mx-4 rounded-2xl bg-white/70 dark:bg-slate-900/50 backdrop-blur-xl border border-white/20 dark:border-slate-800/50 shadow-[0_10px_30px_rgba(15,23,42,0.08)] dark:shadow-[0_10px_40px_rgba(2,6,23,0.45)] transition-colors">
+      <nav
+        ref={mobileMenuRef}
+        className="sticky top-3 z-50 mx-3 sm:mx-4 rounded-2xl bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl border border-slate-200/70 dark:border-slate-800/50 shadow-sm dark:shadow-[0_10px_40px_rgba(2,6,23,0.45)] transition-colors"
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
 
@@ -82,17 +112,17 @@ export default function Navbar() {
               </span>
             </Link>
 
-            {/* Nav links */}
+            {/* Desktop Nav links (hidden on mobile) */}
             <div className="flex items-center gap-6">
               {!loading && profile && (
-                <div className="hidden md:flex items-center gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
+                <div className="hidden md:flex items-center gap-1 text-sm font-medium text-slate-700 dark:text-slate-300">
                   <Link href="/join" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-emerald-600 dark:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors">
                     <MonitorPlay size={16} /> Join Game
                   </Link>
-                  <Link href="/dashboard" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors">
+                  <Link href="/dashboard" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-700 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors">
                     <LayoutDashboard size={16} /> Dashboard
                   </Link>
-                  <Link href="/feedback" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:text-violet-600 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors">
+                  <Link href="/feedback" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-700 hover:text-violet-600 dark:text-slate-300 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors">
                     <MessageSquare size={16} /> Feedback
                   </Link>
                   {profile.role === "admin" && (
@@ -103,19 +133,27 @@ export default function Navbar() {
                 </div>
               )}
 
-              {/* Right section: theme + profile */}
-              <div className="flex items-center gap-3 pl-4 border-l border-gray-200 dark:border-white/10">
-                <button
-                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                  className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors rounded-full"
-                  title="Toggle Theme"
-                >
-                  {mounted ? (theme === "dark" ? <Sun size={18} /> : <Moon size={18} />) : <div className="w-[18px] h-[18px]" />}
-                </button>
+              {/* Right section: theme + profile + hamburger */}
+              <div className="flex items-center gap-2 sm:gap-3 pl-3 sm:pl-4 border-l border-slate-200 dark:border-white/10">
+                {/* Theme toggle — always visible */}
+                {mounted ? (
+                  <button
+                    onClick={handleToggleTheme}
+                    className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors rounded-full"
+                    title="Toggle Theme"
+                    aria-label="Toggle Theme"
+                  >
+                    {resolvedTheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+                  </button>
+                ) : (
+                  <button type="button" disabled aria-hidden="true" className="p-2 text-slate-400 transition-colors rounded-full">
+                    <div className="w-[18px] h-[18px]" />
+                  </button>
+                )}
 
                 {!loading && authUser && (
                   <>
-                    {/* Clickable avatar/name → /profile */}
+                    {/* Avatar/name — visible on all sizes */}
                     <Link href="/profile" className="flex items-center gap-2 group">
                       {avatarUrl ? (
                         <img src={avatarUrl} alt="avatar" className="w-8 h-8 rounded-full object-cover ring-2 ring-transparent group-hover:ring-indigo-400 transition-all" />
@@ -131,20 +169,87 @@ export default function Navbar() {
                       </div>
                     </Link>
 
-                    {/* Logout button → triggers modal */}
+                    {/* Logout — hidden on mobile (accessible via menu) */}
                     <button
                       onClick={() => setShowLogoutModal(true)}
-                      className="p-2 text-slate-400 hover:text-rose-500 transition-colors rounded-full"
+                      className="hidden md:flex p-2 text-slate-400 hover:text-rose-500 transition-colors rounded-full"
                       title="Logout"
                     >
                       <LogOut size={20} />
                     </button>
                   </>
                 )}
+
+                {/* Hamburger button — visible only on mobile */}
+                <button
+                  onClick={() => setMobileOpen((v) => !v)}
+                  className="md:hidden p-2 text-slate-500 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-500/10"
+                  aria-label="Open menu"
+                >
+                  {mobileOpen ? <X size={22} /> : <Menu size={22} />}
+                </button>
               </div>
             </div>
           </div>
         </div>
+
+        {/* ── Mobile Dropdown Menu ── */}
+        <AnimatePresence>
+          {mobileOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.22, ease: "easeInOut" }}
+              className="overflow-hidden md:hidden"
+            >
+              <div className="mx-3 mb-3 rounded-xl bg-white/90 dark:bg-slate-950/90 backdrop-blur-lg border border-slate-200/70 dark:border-slate-700/50 shadow-lg overflow-hidden">
+                {!loading && profile && (
+                  <div className="p-3 space-y-1">
+                    <Link
+                      href="/join"
+                      className="flex items-center gap-3 px-4 py-3 rounded-xl text-emerald-600 dark:text-emerald-400 font-semibold hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors"
+                    >
+                      <MonitorPlay size={18} /> Join Game
+                    </Link>
+                    <Link
+                      href="/dashboard"
+                      className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-700 dark:text-slate-200 font-semibold hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors"
+                    >
+                      <LayoutDashboard size={18} /> Dashboard
+                    </Link>
+                    <Link
+                      href="/feedback"
+                      className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-700 dark:text-slate-200 font-semibold hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors"
+                    >
+                      <MessageSquare size={18} /> Feedback
+                    </Link>
+                    {profile.role === "admin" && (
+                      <Link
+                        href="/admin-dashboard"
+                        className="flex items-center gap-3 px-4 py-3 rounded-xl text-amber-600 dark:text-amber-400 font-semibold bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 transition-colors"
+                      >
+                        <Settings size={18} /> Admin Panel
+                      </Link>
+                    )}
+                  </div>
+                )}
+
+                {/* Divider + Logout */}
+                {!loading && authUser && (
+                  <div className="border-t border-slate-200/70 dark:border-slate-700/50 p-3">
+                    <button
+                      onClick={() => { setMobileOpen(false); setShowLogoutModal(true); }}
+                      className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-rose-500 dark:text-rose-400 font-semibold hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
+                    >
+                      <LogOut size={18} /> Sign Out
+                    </button>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </nav>
 
       {/* ── Logout Confirmation Modal ── */}
