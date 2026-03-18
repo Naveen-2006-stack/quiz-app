@@ -23,6 +23,13 @@ interface FlaggedStudent {
   violations: number;
 }
 
+interface ViolationEntry {
+  id: string | number;         // DB UUID or Date.now() for live events
+  violation_type: string;
+  created_at: string;
+  source: "live" | "db";       // track origin for deduplication display
+}
+
 interface FloatingEmoji {
   id: string;
   emoji: string;
@@ -46,9 +53,13 @@ export default function HostRoom() {
   // Answer Visibility Control
   const [isAnswersHidden, setIsAnswersHidden] = useState(true);
 
+  // Live violation feed — accumulates real-time broadcast events so rapid
+  // consecutive violations are never dropped (functional update pattern)
+  const [liveViolations, setLiveViolations] = useState<ViolationEntry[]>([]);
+
   // Violations Monitoring Modal
   const [selectedViolationsParticipant, setSelectedViolationsParticipant] = useState<{ id: string, name: string } | null>(null);
-  const [violationsHistory, setViolationsHistory] = useState<any[]>([]);
+  const [violationsHistory, setViolationsHistory] = useState<ViolationEntry[]>([]);
   const [loadingViolations, setLoadingViolations] = useState(false);
 
   // Live submission counter state
@@ -131,13 +142,30 @@ export default function HostRoom() {
   useEffect(() => {
     if (!sessionId) return;
     const gameRoomChannel = supabase
-      .channel(`game-room:${sessionId}`)
+      // Listen on the dedicated anticheat channel (matches student's broadcast channel)
+      .channel(`anticheat-room:${sessionId}`)
       .on("broadcast", { event: "anti_cheat_violation" }, (payload: any) => {
         const studentId = payload?.payload?.studentId as string | undefined;
-        if (!studentId) return;
+        const studentName = payload?.payload?.studentName as string | undefined;
+        const violationType = payload?.payload?.violationType as string | undefined;
+        if (!studentId || !violationType) return;
 
-        // Safely increment using store action (avoids stale closure bug)
+        // 1. Increment cheat badge in Zustand (for the leaderboard counter)
         incrementCheatFlag(studentId);
+
+        // 2. Append to local live violations feed using functional update
+        //    so rapid back-to-back events NEVER overwrite each other.
+        setLiveViolations(prev => [
+          {
+            id: Date.now() + Math.random(),   // unique key for React
+            violation_type: violationType,
+            created_at: new Date().toISOString(),
+            source: "live" as const,
+            studentId,
+            studentName,
+          },
+          ...prev,
+        ]);
       })
       .on("broadcast", { event: "emoji_reaction" }, (payload: any) => {
         const emoji = payload?.payload?.emoji as string | undefined;
@@ -334,13 +362,36 @@ export default function HostRoom() {
     setLoadingViolations(true);
     setViolationsHistory([]);
     try {
-      const { data } = await supabase
+      // 1. Load persisted violations from DB
+      const { data: dbData } = await supabase
         .from("participant_violations")
         .select("*")
         .eq("participant_id", pId)
         .eq("session_id", sessionId)
         .order("created_at", { ascending: false });
-      if (data) setViolationsHistory(data);
+
+      // 2. Pull live events for this specific student from in-memory feed
+      const liveForStudent = liveViolations
+        .filter((v: any) => v.studentId === pId)
+        .map((v) => ({ ...v, source: "live" as const }));
+
+      // 3. Merge: live events on top, DB records below.
+      //    De-duplicate: if a live event already appears in DB (within 5s window),
+      //    prefer the DB record (has a real UUID) and drop the live duplicate.
+      const dbIds = new Set((dbData || []).map((d: any) => {
+        const t = new Date(d.created_at).getTime();
+        return `${d.violation_type}:${Math.floor(t / 5000)}`; // 5s bucket
+      }));
+      const uniqueLive = liveForStudent.filter((v) => {
+        const t = new Date(v.created_at).getTime();
+        return !dbIds.has(`${v.violation_type}:${Math.floor(t / 5000)}`);
+      });
+
+      const merged: ViolationEntry[] = [
+        ...uniqueLive,
+        ...(dbData || []).map((d: any) => ({ ...d, source: "db" as const })),
+      ];
+      setViolationsHistory(merged);
     } catch (err) {
       console.error("Failed to load violations:", err);
     } finally {
@@ -580,12 +631,15 @@ export default function HostRoom() {
                       </div>
                     ) : violationsHistory.length === 0 ? (
                       <div className="text-center p-8 text-slate-500 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
-                        No detailed violation logs found. (May be older strikes).
+                        No violation records found for this student.
                       </div>
                     ) : (
                       violationsHistory.map((v, i) => (
-                        <div key={v.id} className="flex items-start gap-4 p-4 rounded-xl border border-rose-100 dark:border-rose-500/20 bg-white dark:bg-slate-800 shadow-sm relative overflow-hidden">
+                        <div key={`${v.id}-${i}`} className="flex items-start gap-4 p-4 rounded-xl border border-rose-100 dark:border-rose-500/20 bg-white dark:bg-slate-800 shadow-sm relative overflow-hidden">
                           <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-rose-500" />
+                          {v.source === "live" && (
+                            <div className="absolute top-2 right-2 px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 uppercase tracking-wider">Live</div>
+                          )}
                           <div className="w-8 h-8 rounded-full bg-rose-100 dark:bg-rose-500/20 flex items-center justify-center text-rose-600 dark:text-rose-400 font-black shrink-0">
                             {violationsHistory.length - i}
                           </div>

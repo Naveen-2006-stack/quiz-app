@@ -131,60 +131,62 @@ export default function StudentPlayRoom() {
   // Init room data
   useEffect(() => {
     initPlayRoom();
-  }, [sessionId]);
-
-  // Anti-cheat: tab switch and page leave detection
+  }, [sessionId]);  // Anti-cheat: hardened detection — tab switch, window blur, mouse leave, context menu, key shortcuts
   useEffect(() => {
     if (!sessionId || !participantId || sessionStatus !== "active") return;
 
+    // Global multi-event cooldown: prevents a single physical action that fires
+    // multiple events (e.g. alt-tab fires both blur + visibilitychange) from sending
+    // duplicate strikes. 3s window is enough to coalesce burst events.
     let strikeCooldown = false;
-    // Used to distinguish a genuine tab switch from a page reload/close.
-    // visibilitychange fires BEFORE beforeunload, so we defer the "Tab Switch" strike
-    // by a short time — if beforeunload fires within that window, we cancel it and
-    // log "Page Refresh / Leave" instead (avoiding double-counting).
     let visibilityTimer: ReturnType<typeof setTimeout> | null = null;
+    let blurDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+    let mouseLeaveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
     let isUnloading = false;
 
-    const gameRoomChannel = supabase.channel(`game-room:${sessionId}`).subscribe();
+    // Create the anti-cheat broadcast channel once for this effect's lifecycle.
+    // We use a distinct channel reference here (not reactionChannelRef) so that
+    // cleanup of this effect doesn't destroy the emoji channel and vice-versa.
+    const gameRoomChannel = supabase.channel(`anticheat-room:${sessionId}`).subscribe();
 
     const triggerStrike = async (type: string) => {
       if (strikeCooldown) return;
       strikeCooldown = true;
       setTimeout(() => { strikeCooldown = false; }, 3000);
 
-      await gameRoomChannel.send({
+      // Best-effort broadcast — host sees it in real-time
+      void gameRoomChannel.send({
         type: "broadcast",
         event: "anti_cheat_violation",
         payload: { studentName: participantName, studentId: participantId, violationType: type },
       });
-      await supabase.rpc("log_violation", {
+      // Persist to DB via RPC (increments cheat_flags + inserts to participant_violations)
+      void supabase.rpc("log_violation", {
         p_session_id: sessionId,
         p_participant_id: participantId,
-        p_violation_type: type
+        p_violation_type: type,
       });
     };
 
+    // ── 1. TAB SWITCH / MINIMIZE (visibilitychange) ──
+    // Deferred 200ms to distinguish from a page unload (which also hides the tab).
     const onVisibilityChange = () => {
       if (document.hidden) {
-        // Defer 200 ms — if beforeunload fires within this window (page reload/close),
-        // cancel the "Tab Switch" strike and let onPageLeave handle it instead.
         visibilityTimer = setTimeout(() => {
           if (!isUnloading) void triggerStrike("Tab Switch / Minimized");
         }, 200);
+      } else {
+        // Tab became visible again — cancel any pending visibility timer
+        if (visibilityTimer !== null) { clearTimeout(visibilityTimer); visibilityTimer = null; }
       }
     };
 
+    // ── 2. PAGE LEAVE / REFRESH (beforeunload + pagehide) ──
+    // Uses fetch with keepalive=true for reliable logging even after the page closes.
     const onPageLeave = () => {
       isUnloading = true;
-      // Cancel any pending "Tab Switch" timer — this is a reload, not a tab switch
-      if (visibilityTimer !== null) {
-        clearTimeout(visibilityTimer);
-        visibilityTimer = null;
-      }
+      if (visibilityTimer !== null) { clearTimeout(visibilityTimer); visibilityTimer = null; }
 
-      // Use fetch with keepalive=true for reliable page-close logging.
-      // sendBeacon cannot pass Authorization headers, but fetch+keepalive can.
-      // The keepalive flag ensures the request completes even after the page unloads.
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
       const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
       if (supabaseUrl && supabaseKey && participantId && sessionId && authTokenRef.current) {
@@ -201,11 +203,8 @@ export default function StudentPlayRoom() {
             p_participant_id: participantId,
             p_violation_type: "Page Refresh / Leave",
           }),
-        }).catch(() => {}); // Silence errors — page is closing
+        }).catch(() => {});
       }
-
-      // Also broadcast real-time badge update to host (best-effort on unload).
-      // Since visibilityTimer was cleared, strikeCooldown is still false here.
       if (!strikeCooldown) {
         strikeCooldown = true;
         gameRoomChannel.send({
@@ -216,21 +215,45 @@ export default function StudentPlayRoom() {
       }
     };
 
-    // Detect when cursor moves out of the browser window
+    // ── 3. WINDOW BLUR (alt-tab, mobile notification, switching to another app) ──
+    // 500ms debounce prevents OS focus-flicker (e.g. a system dialog that immediately
+    // closes) from generating a false positive. If the user refocuses within 500ms
+    // (onWindowFocus), the pending timer is cancelled — no strike logged.
+    const onWindowBlur = () => {
+      if (blurDebounceTimer !== null) return; // Already pending
+      blurDebounceTimer = setTimeout(() => {
+        blurDebounceTimer = null;
+        // Only trigger if the tab is still visible — visibilitychange handles the rest
+        if (!document.hidden) void triggerStrike("Window Lost Focus");
+      }, 500);
+    };
+    const onWindowFocus = () => {
+      if (blurDebounceTimer !== null) { clearTimeout(blurDebounceTimer); blurDebounceTimer = null; }
+    };
+
+    // ── 4. CURSOR LEFT PAGE (mouseleave on document) ──
+    // 500ms debounce suppresses rapid edge-jitter without masking genuine exits.
+    // Cancels if the cursor re-enters the viewport within the debounce window.
     const onMouseLeave = (e: MouseEvent) => {
-      // Only trigger if the cursor truly left the page (not just moved to another element)
       if (e.clientY <= 0 || e.clientX <= 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight) {
-        triggerStrike("Cursor Left Page");
+        if (mouseLeaveDebounceTimer !== null) return;
+        mouseLeaveDebounceTimer = setTimeout(() => {
+          mouseLeaveDebounceTimer = null;
+          void triggerStrike("Cursor Left Page");
+        }, 500);
       }
     };
-
-    // Block right-click context menu
-    const onContextMenu = (e: Event) => {
-      e.preventDefault();
-      triggerStrike("Right-Click Context Menu");
+    const onMouseEnter = () => {
+      if (mouseLeaveDebounceTimer !== null) { clearTimeout(mouseLeaveDebounceTimer); mouseLeaveDebounceTimer = null; }
     };
 
-    // Block common cheat shortcuts (Ctrl+C, Ctrl+U, F12, Ctrl+Shift+I/J/C)
+    // ── 5. RIGHT-CLICK (contextmenu) ──
+    const onContextMenu = (e: Event) => {
+      e.preventDefault();
+      void triggerStrike("Right-Click Context Menu");
+    };
+
+    // ── 6. CHEAT KEYBOARD SHORTCUTS (F12, Ctrl+U, Ctrl+Shift+I/J/C) ──
     const onKeyDown = (e: KeyboardEvent) => {
       if (
         (e.ctrlKey && ['u', 's'].includes(e.key.toLowerCase())) ||
@@ -238,22 +261,33 @@ export default function StudentPlayRoom() {
         (e.ctrlKey && e.shiftKey && ['i', 'j', 'c'].includes(e.key.toLowerCase()))
       ) {
         e.preventDefault();
-        triggerStrike("Blocked Shortcut: " + e.key);
+        void triggerStrike("Blocked Shortcut: " + e.key);
       }
     };
 
     document.addEventListener("visibilitychange", onVisibilityChange);
     window.addEventListener("pagehide", onPageLeave);
     window.addEventListener("beforeunload", onPageLeave);
+    window.addEventListener("blur", onWindowBlur);
+    window.addEventListener("focus", onWindowFocus);
     document.addEventListener("mouseleave", onMouseLeave);
+    document.addEventListener("mouseenter", onMouseEnter);
     document.addEventListener("contextmenu", onContextMenu);
     document.addEventListener("keydown", onKeyDown);
 
     return () => {
+      // Clear all pending debounce timers before removing listeners
+      if (visibilityTimer !== null) clearTimeout(visibilityTimer);
+      if (blurDebounceTimer !== null) clearTimeout(blurDebounceTimer);
+      if (mouseLeaveDebounceTimer !== null) clearTimeout(mouseLeaveDebounceTimer);
+
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("pagehide", onPageLeave);
       window.removeEventListener("beforeunload", onPageLeave);
+      window.removeEventListener("blur", onWindowBlur);
+      window.removeEventListener("focus", onWindowFocus);
       document.removeEventListener("mouseleave", onMouseLeave);
+      document.removeEventListener("mouseenter", onMouseEnter);
       document.removeEventListener("contextmenu", onContextMenu);
       document.removeEventListener("keydown", onKeyDown);
       void supabase.removeChannel(gameRoomChannel);
@@ -263,7 +297,6 @@ export default function StudentPlayRoom() {
   // ── Emoji reactions: send + receive on the SAME game-room channel as the host ──
   // Previously the student used a separate 'emoji-room' channel which meant
   // (a) the host never received emojis from students, and
-  // (b) students never saw each other's emojis.
   // Fix: join the shared 'game-room' channel and listen for emoji_reaction broadcasts.
   useEffect(() => {
     if (!sessionId) return;
