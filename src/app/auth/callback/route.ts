@@ -37,16 +37,41 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     
     if (!error) {
+      let redirectPath = next
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, avatar_url, display_name')
+          .eq('id', user.id)
+          .maybeSingle()
+
+        if (!profile) {
+          const fallbackName = user.email?.split('@')[0] || 'Player'
+          await supabase.from('profiles').upsert({
+            id: user.id,
+            display_name: fallbackName,
+          })
+          redirectPath = '/profile?setup=avatar'
+        } else if (!profile.avatar_url) {
+          redirectPath = '/profile?setup=avatar'
+        }
+      }
+
       const forwardedHost = request.headers.get('x-forwarded-host') // original origin before load balancer
       const isLocalEnv = process.env.NODE_ENV === 'development'
       
       if (isLocalEnv) {
         // we can be sure that there is no load balancer in between, so no need to watch for X-Forwarded-Host
-        return NextResponse.redirect(`${origin}${next}`)
+        return NextResponse.redirect(`${origin}${redirectPath}`)
       } else if (forwardedHost) {
-        return NextResponse.redirect(`https://${forwardedHost}${next}`)
+        return NextResponse.redirect(`https://${forwardedHost}${redirectPath}`)
       } else {
-        return NextResponse.redirect(`${origin}${next}`)
+        return NextResponse.redirect(`${origin}${redirectPath}`)
       }
     }
   }

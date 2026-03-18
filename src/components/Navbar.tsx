@@ -61,9 +61,9 @@ export default function Navbar() {
       if (!user) { setProfile(null); setLoading(false); return; }
       const { data } = await supabase.from("profiles").select("display_name, role, avatar_url").eq("id", user.id).maybeSingle();
       setProfile({
-        display_name: data?.display_name || user.user_metadata?.full_name || user.email || "User",
+        display_name: data?.display_name || user.email || "User",
         role: data?.role || "student",
-        avatar_url: data?.avatar_url || user.user_metadata?.avatar_url,
+        avatar_url: data?.avatar_url || undefined,
       });
     } finally {
       setLoading(false);

@@ -66,10 +66,14 @@ export default function UnifiedDashboard() {
   const [activeTab, setActiveTab] = useState<'history' | 'hosted'>('history');
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session?.user) { router.push("/login"); return; }
       setUser(session.user);
-      fetchProfile(session.user.id);
+      const hasAvatar = await fetchProfile(session.user.id, session.user.email ?? "");
+      if (!hasAvatar) {
+        router.push('/profile?setup=avatar');
+        return;
+      }
       fetchHistory(session.user.id);
       fetchQuizzes(session.user.id);
     });
@@ -81,9 +85,23 @@ export default function UnifiedDashboard() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchProfile = async (userId: string) => {
-    const { data } = await supabase.from("profiles").select("display_name, role").eq("id", userId).maybeSingle();
-    setProfile({ display_name: data?.display_name || "User", role: data?.role || "student" });
+  const fetchProfile = async (userId: string, email: string) => {
+    const { data } = await supabase
+      .from("profiles")
+      .select("display_name, role, avatar_url")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (!data) {
+      await supabase.from("profiles").upsert({
+        id: userId,
+        display_name: email.split("@")[0] || "User",
+      });
+      return false;
+    }
+
+    setProfile({ display_name: data.display_name || "User", role: data.role || "student" });
+    return !!data.avatar_url;
   };
 
   const fetchHistory = async (userId: string) => {
