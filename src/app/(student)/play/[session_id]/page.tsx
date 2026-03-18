@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
-import { useLiveSession } from "@/hooks/useLiveSession";
 import { useGameStore } from "@/store/useGameStore";
 import { ActiveQuestionCard } from "@/components/game/ActiveQuestionCard";
 import { motion, AnimatePresence } from "framer-motion";
@@ -69,7 +68,50 @@ export default function StudentPlayRoom() {
   // Universal emoji floats — same logic as Host screen
   const [floatingEmojis, setFloatingEmojis] = useState<FloatingEmoji[]>([]);
 
-  useLiveSession(sessionId, "student");
+  // Student realtime sync: follow host-driven session updates from live_sessions.
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const sessionChannel = supabase
+      .channel(`student-session:${sessionId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "live_sessions",
+          filter: `id=eq.${sessionId}`,
+        },
+        (payload) => {
+          const next = payload.new as {
+            current_question_index?: number | null;
+            status?: string | null;
+            [key: string]: any;
+          };
+
+          // Keep local session payload in sync with the source of truth.
+          setSessionInfo((prev: any) => (prev ? { ...prev, ...next } : prev));
+
+          if (typeof next.status === "string") {
+            setSessionStatus(next.status as any);
+          }
+
+          if (typeof next.current_question_index === "number") {
+            const nextIndex = next.current_question_index;
+            setCurrentQuestionIndex(nextIndex);
+
+            // Reset per-question student UI state when host advances question.
+            setRevealedQuestionIndex(null);
+            setLastAnswerCorrect(null);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(sessionChannel);
+    };
+  }, [sessionId, setCurrentQuestionIndex, setSessionStatus]);
 
   // Auto-save notes (only after initial notes have been loaded from DB to avoid overwriting)
   useEffect(() => {

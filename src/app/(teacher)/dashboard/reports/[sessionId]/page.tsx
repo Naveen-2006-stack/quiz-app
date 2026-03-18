@@ -85,6 +85,7 @@ export default function SessionAnalyticsReportPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isAdminViewer, setIsAdminViewer] = useState(false);
 
   const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -118,6 +119,7 @@ export default function SessionAnalyticsReportPage() {
         .maybeSingle();
 
       const isAdmin = profile?.role === "admin";
+      setIsAdminViewer(isAdmin);
 
       const { data: sData, error: sErr } = await supabase
         .from("live_sessions")
@@ -295,6 +297,9 @@ export default function SessionAnalyticsReportPage() {
     URL.revokeObjectURL(url);
   };
 
+  const backHref = isAdminViewer ? "/admin-dashboard" : "/dashboard/reports";
+  const backLabel = isAdminViewer ? "Back to Admin Dashboard" : "Back to Reports";
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 px-4 py-10 text-slate-50">
@@ -317,8 +322,8 @@ export default function SessionAnalyticsReportPage() {
         <div className="mx-auto max-w-4xl rounded-2xl border border-rose-700/40 bg-rose-950/20 p-6">
           <h1 className="text-2xl font-bold text-rose-300">Report Error</h1>
           <p className="mt-2 text-rose-200/90">{error}</p>
-          <Link href="/dashboard/reports" className="mt-5 inline-flex items-center gap-2 text-slate-200 hover:text-white">
-            <ArrowLeft size={16} /> Back to Reports
+          <Link href={backHref} className="mt-5 inline-flex items-center gap-2 text-slate-200 hover:text-white">
+            <ArrowLeft size={16} /> {backLabel}
           </Link>
         </div>
       </div>
@@ -335,8 +340,8 @@ export default function SessionAnalyticsReportPage() {
       >
         <motion.div variants={itemVariants} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <Link href="/dashboard/reports" className="mb-2 inline-flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200">
-              <ArrowLeft size={14} /> Back to Reports
+            <Link href={backHref} className="mb-2 inline-flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200">
+              <ArrowLeft size={14} /> {backLabel}
             </Link>
             <h1 className="text-3xl font-black tracking-tight text-slate-50">
               {sessionInfo?.quizzes?.title || "Session Report"}
