@@ -14,7 +14,6 @@ const getAvatarUrl = (seed: string) =>
 
 export default function ProfilePage() {
   const router = useRouter();
-  const [isSetupMode, setIsSetupMode] = useState(false);
   const [supabase] = useState(() => createSupabaseBrowserClient());
 
   const [user, setUser] = useState<any>(null);
@@ -27,11 +26,6 @@ export default function ProfilePage() {
   const [selectedAvatar, setSelectedAvatar] = useState<string>(getAvatarUrl(avatarSeeds[0]));
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      setIsSetupMode(params.get("setup") === "avatar");
-    }
-
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session?.user) { router.push("/login"); return; }
       setUser(session.user);
@@ -52,24 +46,18 @@ export default function ProfilePage() {
     if (!user || !displayName.trim()) return;
     setSaveError(null);
     setSaving(true);
-    const { data: savedProfile, error } = await supabase
+    const { error } = await supabase
       .from("profiles")
-      .upsert({ id: user.id, display_name: displayName.trim(), avatar_url: selectedAvatar }, { onConflict: "id" })
-      .select("avatar_url")
-      .single();
+      .upsert({ id: user.id, display_name: displayName.trim(), avatar_url: selectedAvatar }, { onConflict: "id" });
 
-    if (error || !savedProfile?.avatar_url) {
+    if (error) {
       setSaving(false);
-      setSaveError("Could not save your avatar. Please try again.");
+      setSaveError("Could not save profile changes. Please try again.");
       return;
     }
 
     setSaving(false);
     setSaved(true);
-    if (isSetupMode) {
-      router.replace("/dashboard");
-      return;
-    }
     setTimeout(() => setSaved(false), 2500);
   };
 
@@ -79,12 +67,10 @@ export default function ProfilePage() {
   return (
     <div className="max-w-xl mx-auto px-4 py-12">
       {/* Back */}
-      {!isSetupMode && (
-        <Link href="/dashboard" className="inline-flex items-center gap-2 text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors mb-8 group">
-          <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
-          Back to Dashboard
-        </Link>
-      )}
+      <Link href="/dashboard" className="inline-flex items-center gap-2 text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors mb-8 group">
+        <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
+        Back to Dashboard
+      </Link>
 
       <div className="bg-white dark:bg-slate-800 rounded-[2rem] shadow-xl shadow-slate-200/40 dark:shadow-none border border-gray-100 dark:border-white/5 overflow-hidden">
         {/* Header gradient */}
@@ -92,11 +78,6 @@ export default function ProfilePage() {
 
         {/* Avatar */}
         <div className="px-8 pb-8">
-          {isSetupMode && (
-            <div className="mb-4 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">
-              Welcome! Choose your avatar to continue.
-            </div>
-          )}
           <div className="-mt-14 mb-6 w-24 h-24">
             {avatarUrl ? (
               <img src={avatarUrl} alt="Avatar" className="w-24 h-24 rounded-2xl object-cover ring-4 ring-white dark:ring-slate-800 shadow-xl" />

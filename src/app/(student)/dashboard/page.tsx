@@ -69,16 +69,7 @@ export default function UnifiedDashboard() {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session?.user) { router.push("/login"); return; }
       setUser(session.user);
-      const hasAvatar = await fetchProfile(session.user.id, session.user.email ?? "");
-      if (!hasAvatar) {
-        // Retry once to avoid redirect-loop from eventual consistency right after save.
-        await new Promise((resolve) => setTimeout(resolve, 350));
-        const hasAvatarAfterRetry = await fetchProfile(session.user.id, session.user.email ?? "");
-        if (!hasAvatarAfterRetry) {
-          router.push('/profile?setup=avatar');
-          return;
-        }
-      }
+      await fetchProfile(session.user.id, session.user.email ?? "");
       fetchHistory(session.user.id);
       fetchQuizzes(session.user.id);
     });
@@ -102,11 +93,11 @@ export default function UnifiedDashboard() {
         id: userId,
         display_name: email.split("@")[0] || "User",
       });
-      return false;
+      setProfile({ display_name: email.split("@")[0] || "User", role: "student" });
+      return;
     }
 
     setProfile({ display_name: data.display_name || "User", role: data.role || "student" });
-    return !!data.avatar_url;
   };
 
   const fetchHistory = async (userId: string) => {

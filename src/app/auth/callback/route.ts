@@ -37,7 +37,7 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     
     if (!error) {
-      let redirectPath = next
+      const redirectPath = next
 
       const {
         data: { user },
@@ -56,9 +56,6 @@ export async function GET(request: Request) {
             id: user.id,
             display_name: fallbackName,
           })
-          redirectPath = '/profile?setup=avatar'
-        } else if (!profile.avatar_url) {
-          redirectPath = '/profile?setup=avatar'
         }
       }
 
