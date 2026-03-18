@@ -89,10 +89,6 @@ export default function UnifiedDashboard() {
       .maybeSingle();
 
     if (!data) {
-      await supabase.from("profiles").upsert({
-        id: userId,
-        display_name: email.split("@")[0] || "User",
-      });
       setProfile({ display_name: email.split("@")[0] || "User", role: "student" });
       return;
     }

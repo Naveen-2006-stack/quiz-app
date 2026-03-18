@@ -46,11 +46,14 @@ export default function ProfilePage() {
     if (!user || !displayName.trim()) return;
     setSaveError(null);
     setSaving(true);
-    const { error } = await supabase
+    const { data: updatedProfile, error } = await supabase
       .from("profiles")
-      .upsert({ id: user.id, display_name: displayName.trim(), avatar_url: selectedAvatar }, { onConflict: "id" });
+      .update({ display_name: displayName.trim(), avatar_url: selectedAvatar })
+      .eq("id", user.id)
+      .select("id")
+      .maybeSingle();
 
-    if (error) {
+    if (error || !updatedProfile) {
       setSaving(false);
       setSaveError("Could not save profile changes. Please try again.");
       return;

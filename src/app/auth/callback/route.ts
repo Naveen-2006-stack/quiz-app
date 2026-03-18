@@ -51,11 +51,7 @@ export async function GET(request: Request) {
           .maybeSingle()
 
         if (!profile) {
-          const fallbackName = user.email?.split('@')[0] || 'Player'
-          await supabase.from('profiles').upsert({
-            id: user.id,
-            display_name: fallbackName,
-          })
+          // Profile row may be auto-created by DB trigger; if not, app continues with fallback UI.
         }
       }
 
