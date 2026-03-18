@@ -71,8 +71,13 @@ export default function UnifiedDashboard() {
       setUser(session.user);
       const hasAvatar = await fetchProfile(session.user.id, session.user.email ?? "");
       if (!hasAvatar) {
-        router.push('/profile?setup=avatar');
-        return;
+        // Retry once to avoid redirect-loop from eventual consistency right after save.
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        const hasAvatarAfterRetry = await fetchProfile(session.user.id, session.user.email ?? "");
+        if (!hasAvatarAfterRetry) {
+          router.push('/profile?setup=avatar');
+          return;
+        }
       }
       fetchHistory(session.user.id);
       fetchQuizzes(session.user.id);

@@ -23,6 +23,7 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [selectedAvatar, setSelectedAvatar] = useState<string>(getAvatarUrl(avatarSeeds[0]));
 
   useEffect(() => {
@@ -49,14 +50,24 @@ export default function ProfilePage() {
 
   const handleSave = async () => {
     if (!user || !displayName.trim()) return;
+    setSaveError(null);
     setSaving(true);
-    await supabase
+    const { data: savedProfile, error } = await supabase
       .from("profiles")
-      .upsert({ id: user.id, display_name: displayName.trim(), avatar_url: selectedAvatar }, { onConflict: "id" });
+      .upsert({ id: user.id, display_name: displayName.trim(), avatar_url: selectedAvatar }, { onConflict: "id" })
+      .select("avatar_url")
+      .single();
+
+    if (error || !savedProfile?.avatar_url) {
+      setSaving(false);
+      setSaveError("Could not save your avatar. Please try again.");
+      return;
+    }
+
     setSaving(false);
     setSaved(true);
     if (isSetupMode) {
-      router.push("/dashboard");
+      router.replace("/dashboard");
       return;
     }
     setTimeout(() => setSaved(false), 2500);
@@ -172,6 +183,10 @@ export default function ProfilePage() {
               >
                 {saving ? "Saving…" : saved ? "✓ Saved!" : "Save Changes"}
               </motion.button>
+
+              {saveError && (
+                <p className="text-center text-sm font-semibold text-rose-500">{saveError}</p>
+              )}
 
               <AnimatePresence>
                 {saved && (
