@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
@@ -8,7 +8,7 @@ import { Loader2, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 
-export default function LoginPage() {
+function LoginPageContent() {
   const [error, setError] = useState("");
   const [googleLoading, setGoogleLoading] = useState(false);
   const router = useRouter();
@@ -111,5 +111,21 @@ export default function LoginPage() {
         </div>
       </motion.div>
     </div>
+  );
+}
+
+function LoginPageFallback() {
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 transition-colors flex items-center justify-center">
+      <Loader2 className="animate-spin text-indigo-500 w-10 h-10" />
+    </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginPageFallback />}>
+      <LoginPageContent />
+    </Suspense>
   );
 }
