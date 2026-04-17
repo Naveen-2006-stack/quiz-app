@@ -276,6 +276,11 @@ export default function StudentPlayRoom() {
 
     // ── 6. CHEAT KEYBOARD SHORTCUTS (F12, Ctrl+U, Ctrl+Shift+I/J/C) ──
     const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'PrintScreen') {
+        void triggerStrike("Screenshot Attempt (PrintScreen)");
+        return;
+      }
+
       if (
         (e.ctrlKey && ['u', 's'].includes(e.key.toLowerCase())) ||
         e.key === 'F12' ||

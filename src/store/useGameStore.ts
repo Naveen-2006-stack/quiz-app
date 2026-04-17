@@ -34,16 +34,29 @@ export const useGameStore = create<GameState>((set) => ({
   
   setCurrentQuestionIndex: (index) => set({ currentQuestionIndex: index }),
   
-  updateParticipant: (participant) => set((state) => ({
-    participants: {
-      ...state.participants,
-      [participant.id]: participant
-    }
-  })),
+  updateParticipant: (participant) => set((state) => {
+    const prev = state.participants[participant.id];
+    const merged = {
+      ...participant,
+      cheat_flags: Math.max(participant.cheat_flags || 0, prev?.cheat_flags || 0),
+    };
+    return {
+      participants: {
+        ...state.participants,
+        [participant.id]: merged,
+      },
+    };
+  }),
 
-  setParticipants: (participantsList) => set(() => {
+  setParticipants: (participantsList) => set((state) => {
     const map: Record<string, Participant> = {};
-    participantsList.forEach(p => map[p.id] = p);
+    participantsList.forEach((p) => {
+      const prev = state.participants[p.id];
+      map[p.id] = {
+        ...p,
+        cheat_flags: Math.max(p.cheat_flags || 0, prev?.cheat_flags || 0),
+      };
+    });
     return { participants: map };
   }),
 
