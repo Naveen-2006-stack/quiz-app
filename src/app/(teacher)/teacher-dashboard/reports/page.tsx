@@ -28,7 +28,7 @@ export default function ReportsDashboard() {
         participants(id, display_name, score, cheat_flags)
       `)
       .eq("teacher_id", user.id)
-      .in("status", ["active", "finished", "completed"])
+      .in("status", ["waiting", "active", "finished", "completed"])
       .order("started_at", { ascending: false });
 
     if (data) setSessions(data);

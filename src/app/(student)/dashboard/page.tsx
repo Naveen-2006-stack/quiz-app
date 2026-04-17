@@ -214,7 +214,7 @@ export default function UnifiedDashboard() {
         participants(id, display_name, score, cheat_flags, is_banned)
       `)
       .eq("teacher_id", userId)
-      .in("status", ["active", "finished", "completed"])
+      .in("status", ["waiting", "active", "finished", "completed"])
       .order("started_at", { ascending: false });
 
     if (data) {
