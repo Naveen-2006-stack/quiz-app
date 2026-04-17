@@ -16,6 +16,16 @@ interface Quiz {
   _count?: { questions: number };
 }
 
+interface ReportSession {
+  id: string;
+  status: string;
+  started_at: string | null;
+  finished_at: string | null;
+  join_code: string;
+  quizzes: { title: string } | null;
+  participants?: Array<{ id: string; display_name: string; score: number; cheat_flags?: number; is_banned?: boolean }>;
+}
+
 interface ParticipantHistory {
   id: string;
   score: number;
@@ -61,9 +71,11 @@ export default function UnifiedDashboard() {
 
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [history, setHistory] = useState<ParticipantHistory[]>([]);
+  const [reportSessions, setReportSessions] = useState<ReportSession[]>([]);
   const [loadingQuizzes, setLoadingQuizzes] = useState(true);
   const [loadingHistory, setLoadingHistory] = useState(true);
-  const [activeTab, setActiveTab] = useState<'history' | 'hosted'>('history');
+  const [loadingReports, setLoadingReports] = useState(true);
+  const [activeTab, setActiveTab] = useState<'history' | 'hosted' | 'reports'>('history');
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -72,6 +84,7 @@ export default function UnifiedDashboard() {
       await fetchProfile(session.user.id, session.user.email ?? "");
       fetchHistory(session.user.id);
       fetchQuizzes(session.user.id);
+      fetchReports(session.user.id);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -190,6 +203,31 @@ export default function UnifiedDashboard() {
     setLoadingQuizzes(false);
   };
 
+  const fetchReports = async (userId: string) => {
+    setLoadingReports(true);
+
+    const { data } = await supabase
+      .from("live_sessions")
+      .select(`
+        *,
+        quizzes(title),
+        participants(id, display_name, score, cheat_flags, is_banned)
+      `)
+      .eq("teacher_id", userId)
+      .in("status", ["active", "finished", "completed"])
+      .order("started_at", { ascending: false });
+
+    if (data) {
+      const cleaned = data.map((session: any) => ({
+        ...session,
+        participants: (session.participants || []).filter((participant: any) => !participant.is_banned),
+      }));
+      setReportSessions(cleaned);
+    }
+
+    setLoadingReports(false);
+  };
+
   const createNewQuiz = async () => {
     if (!user) return;
     const { data, error } = await supabase
@@ -261,8 +299,8 @@ export default function UnifiedDashboard() {
       </div>
 
       {/* Tabs */}
-      <div className="flex bg-slate-100 dark:bg-slate-800/60 p-1 rounded-2xl w-fit border border-slate-200/70 dark:border-slate-700/70">
-        {(['history', 'hosted'] as const).map((tab) => (
+      <div className="flex flex-wrap gap-2 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-2xl w-fit border border-slate-200/70 dark:border-slate-700/70">
+        {(['history', 'hosted', 'reports'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -272,7 +310,7 @@ export default function UnifiedDashboard() {
                 : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
             }`}
           >
-            {tab === 'history' ? '🎮 Games Played' : '📋 My Quizzes'}
+            {tab === 'history' ? '🎮 Games Played' : tab === 'hosted' ? '📋 My Quizzes' : '📊 Reports'}
           </button>
         ))}
       </div>
@@ -325,12 +363,6 @@ export default function UnifiedDashboard() {
                     <div className={`mt-1 text-sm font-semibold ${rankView.colorClass}`}>
                       {rankView.label}
                     </div>
-                    <Link
-                      href={`/dashboard/reports/${entry.session_id}`}
-                      className="mt-2 inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/20"
-                    >
-                      <FileText size={12} /> View Report
-                    </Link>
                   </div>
                 </motion.div>
                 );
@@ -394,6 +426,80 @@ export default function UnifiedDashboard() {
                   </motion.div>
                 ))}
           </AnimatePresence>
+        </div>
+      )}
+
+      {/* Reports Tab */}
+      {activeTab === 'reports' && (
+        <div className="space-y-4">
+          {loadingReports ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-32 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-white/5 shadow-sm animate-pulse" />
+              ))}
+            </div>
+          ) : reportSessions.length === 0 ? (
+            <div className="text-center py-20 bg-white dark:bg-slate-800 rounded-3xl border-2 border-dashed border-slate-200 dark:border-white/10 shadow-sm">
+              <div className="text-5xl mb-4">📊</div>
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">No reports yet</h3>
+              <p className="text-slate-500 dark:text-slate-400 mb-6">Run a live quiz to generate analytics and session reports.</p>
+              <button
+                onClick={() => setActiveTab('hosted')}
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-lg shadow-indigo-500/30 transition-all"
+              >
+                Back to My Quizzes
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {reportSessions.map((session, idx) => {
+                const sortedPlayers = [...(session.participants || [])].sort((a, b) => b.score - a.score);
+                const totalPlayers = sortedPlayers.length;
+                const totalCheats = sortedPlayers.reduce((sum, participant) => sum + (participant.cheat_flags || 0), 0);
+                const topScore = sortedPlayers[0]?.score || 0;
+
+                return (
+                  <motion.div
+                    key={session.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.04 }}
+                    className="bg-white dark:bg-slate-800 rounded-2xl px-6 py-5 shadow-sm border border-slate-200/60 dark:border-white/5"
+                  >
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <h3 className="font-bold text-slate-900 dark:text-white text-lg">{session.quizzes?.title || "Unknown Quiz"}</h3>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                          {session.status === "active" ? "Live now" : "Played on"} {new Date(session.finished_at || session.started_at || Date.now()).toLocaleString()}
+                        </p>
+                      </div>
+                      <Link
+                        href={`/dashboard/reports/${session.id}`}
+                        className="inline-flex items-center justify-center rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/20"
+                      >
+                        View Full Analytics
+                      </Link>
+                    </div>
+
+                    <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-white/5 p-4">
+                        <div className="text-xs font-semibold text-slate-500">Players</div>
+                        <div className="mt-1 text-2xl font-black text-slate-900 dark:text-white">{totalPlayers}</div>
+                      </div>
+                      <div className="rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-white/5 p-4">
+                        <div className="text-xs font-semibold text-slate-500">Top Score</div>
+                        <div className="mt-1 text-2xl font-black text-slate-900 dark:text-white">{topScore}</div>
+                      </div>
+                      <div className="rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-white/5 p-4">
+                        <div className="text-xs font-semibold text-slate-500">Cheat Flags</div>
+                        <div className="mt-1 text-2xl font-black text-slate-900 dark:text-white">{totalCheats}</div>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>

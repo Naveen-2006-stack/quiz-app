@@ -199,7 +199,7 @@ export default function TeacherDashboard() {
           My Quizzes
         </button>
         <Link
-          href="/dashboard/reports"
+          href="/teacher-dashboard/reports"
           className="px-5 py-2.5 rounded-xl text-slate-500 dark:text-slate-400 font-semibold hover:text-slate-900 dark:hover:text-white transition-colors"
         >
           Reports
