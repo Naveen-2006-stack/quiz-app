@@ -6,7 +6,8 @@ import { supabase } from "@/lib/supabase/client";
 import { useLiveSession } from "@/hooks/useLiveSession";
 import { useGameStore } from "@/store/useGameStore";
 import { motion, AnimatePresence } from "framer-motion";
-import { Users, Play, Copy, Check, ArrowLeft, CheckSquare, LayoutDashboard, ShieldAlert, XCircle, Trash2, Eye, EyeOff } from "lucide-react";
+import { Users, Play, Copy, Check, ArrowLeft, CheckSquare, LayoutDashboard, ShieldAlert, XCircle, Trash2, Eye, EyeOff, ExternalLink } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { cn } from "@/lib/utils";
 
 interface LiveSession {
@@ -41,6 +42,7 @@ export default function HostRoom() {
   const router = useRouter();
   const params = useParams();
   const sessionId = params.session_id as string;
+  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
 
   const [sessionInfo, setSessionInfo] = useState<LiveSession | null>(null);
   const [questions, setQuestions] = useState<any[]>([]);
@@ -399,6 +401,8 @@ export default function HostRoom() {
 
   const participantsList = Object.values(participantsMap);
   const totalPlayers = participantsList.length;
+  const joinCode = sessionInfo?.join_code || "------";
+  const joinUrl = `${baseUrl}/join?code=${encodeURIComponent(sessionInfo?.join_code || "")}`;
 
   // ───────── ACTIVE / FINISHED screen ─────────
   if (sessionStatus === "active" || sessionStatus === "finished") {
@@ -671,7 +675,8 @@ export default function HostRoom() {
 
   // ───────── WAITING LOBBY screen ─────────
   return (
-    <div className="max-w-5xl mx-auto py-12 px-4">
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-5xl mx-auto py-12 px-4">
       <div className="pointer-events-none fixed inset-0 z-[60] overflow-hidden">
         <AnimatePresence>
           {floatingEmojis.map((item) => (
@@ -692,32 +697,66 @@ export default function HostRoom() {
       </div>
 
       {/* Back link */}
-      <button onClick={() => router.push("/dashboard")} className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors mb-8 group">
+      <button onClick={() => router.push("/dashboard")} className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 transition-colors mb-8 group">
         <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" /> Back to Dashboard
       </button>
 
       {/* Join code display */}
-      <div className="text-center mb-12">
-        <p className="text-slate-500 dark:text-slate-400 font-medium mb-3">Students join at <strong className="text-slate-900 dark:text-white">levelnlearn.vercel.app</strong></p>
-        <div className="inline-flex items-center gap-4 bg-white/70 dark:bg-slate-800 p-4 pl-8 rounded-full shadow-xl border border-white dark:border-white/10 backdrop-blur-md">
-          <span className="text-6xl font-mono tracking-[0.2em] font-bold text-slate-800 dark:text-white">
-            {sessionInfo?.join_code || "------"}
-          </span>
-          <button
-            onClick={copyPin}
-            className="w-16 h-16 flex items-center justify-center rounded-full bg-white/80 hover:bg-white text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400 transition-colors border border-indigo-100/80 dark:border-transparent"
-          >
-            {copied ? <Check size={28} /> : <Copy size={28} />}
-          </button>
+      <div className="mb-12 rounded-3xl bg-white border border-slate-200/80 shadow-sm p-6 md:p-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500 mb-3">Game PIN</p>
+            <div className="flex items-center gap-4">
+              <span className="text-5xl md:text-6xl font-mono tracking-[0.18em] font-extrabold text-indigo-600">
+                {joinCode}
+              </span>
+              <button
+                onClick={copyPin}
+                className="w-14 h-14 flex items-center justify-center rounded-2xl bg-slate-100 hover:bg-slate-200 text-indigo-600 transition-colors border border-slate-200"
+                aria-label="Copy game PIN"
+              >
+                {copied ? <Check size={24} /> : <Copy size={24} />}
+              </button>
+            </div>
+            <p className="mt-4 text-sm text-slate-500">Students can join instantly by scanning the QR code.</p>
+            <p className="mt-2 text-xs text-slate-400 break-all">{joinUrl}</p>
+            <a
+              href={joinUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition-colors"
+            >
+              Open Join Page <ExternalLink size={14} />
+            </a>
+          </div>
+
+          <div className="justify-self-center md:justify-self-end">
+            <motion.div
+              initial={{ scale: 0.98, opacity: 0.95 }}
+              animate={{ scale: [1, 1.02, 1], opacity: [0.95, 1, 0.95] }}
+              transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+              className="bg-slate-50 border border-slate-200 rounded-2xl p-4 shadow-inner"
+            >
+              <QRCodeSVG
+                value={joinUrl}
+                size={180}
+                fgColor="#0f172a"
+                bgColor="#ffffff"
+                level="H"
+                includeMargin
+              />
+            </motion.div>
+            <p className="mt-3 text-center text-xs font-medium text-slate-500">Scan to join</p>
+          </div>
         </div>
       </div>
 
       {/* Player count + Start button */}
       <div className="flex justify-between items-end mb-6">
-        <div className="flex items-center gap-3 bg-white dark:bg-slate-800 px-6 py-3 rounded-2xl shadow-sm border border-slate-200/60 dark:border-white/10">
+        <div className="flex items-center gap-3 bg-white px-6 py-3 rounded-2xl shadow-sm border border-slate-200/60">
           <Users className="text-indigo-500" size={24} />
-          <span className="text-2xl font-bold text-slate-900 dark:text-white">{participantsList.length}</span>
-          <span className="text-slate-500 dark:text-slate-400 font-medium">Players Connected</span>
+          <span className="text-2xl font-bold text-slate-900">{participantsList.length}</span>
+          <span className="text-slate-500 font-medium">Players Connected</span>
         </div>
         <motion.button
           whileHover={{ scale: 1.05 }}
@@ -731,21 +770,21 @@ export default function HostRoom() {
       </div>
 
       {startError && (
-        <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
+        <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
           {startError}
         </div>
       )}
 
       {/* Player grid */}
-      <div className="bg-white dark:bg-slate-800/50 rounded-3xl p-8 min-h-[380px] border border-slate-200/60 dark:border-white/5 shadow-sm">
+      <div className="bg-white rounded-3xl p-8 min-h-[380px] border border-slate-200/60 shadow-sm">
         <AnimatePresence>
           {participantsList.length === 0 ? (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="flex flex-col items-center justify-center h-full pt-16 text-slate-400 dark:text-slate-500"
+              className="flex flex-col items-center justify-center h-full pt-16 text-slate-400"
             >
-              <div className="w-16 h-16 rounded-full border-4 border-dashed border-slate-300 dark:border-slate-600 animate-[spin_3s_linear_infinite] mb-6" />
+              <div className="w-16 h-16 rounded-full border-4 border-dashed border-slate-300 animate-[spin_3s_linear_infinite] mb-6" />
               <p className="text-2xl font-medium tracking-tight">Waiting for players…</p>
             </motion.div>
           ) : (
@@ -759,7 +798,7 @@ export default function HostRoom() {
                   transition={{ type: "spring", bounce: 0.6 }}
                   className="group relative"
                 >
-                  <div className="bg-white dark:bg-slate-700 px-5 py-2.5 rounded-xl shadow-md border border-gray-100 dark:border-white/10 font-bold text-lg text-slate-800 dark:text-white">
+                  <div className="bg-white px-5 py-2.5 rounded-xl shadow-md border border-gray-100 font-bold text-lg text-slate-800">
                     {p.display_name}
                   </div>
                   <button
@@ -775,6 +814,7 @@ export default function HostRoom() {
           )}
         </AnimatePresence>
       </div>
+    </div>
     </div>
   );
 }
