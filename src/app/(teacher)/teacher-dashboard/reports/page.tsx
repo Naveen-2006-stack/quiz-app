@@ -17,21 +17,78 @@ export default function ReportsDashboard() {
   const fetchFinishedSessions = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     const user = session?.user;
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
 
-    // Fetch live + completed sessions and inner join quizzes and participants
-    const { data } = await supabase
+    // Include legacy sessions where teacher_id may be missing by resolving through owned quiz IDs.
+    const { data: ownedQuizzes } = await supabase
+      .from("quizzes")
+      .select("id")
+      .eq("teacher_id", user.id);
+
+    const ownedQuizIds = (ownedQuizzes || []).map((quiz: any) => quiz.id);
+
+    let sessionsQuery = supabase
       .from("live_sessions")
       .select(`
-        *,
-        quizzes(title),
-        participants(id, display_name, score, cheat_flags)
+        id,
+        status,
+        started_at,
+        finished_at,
+        join_code,
+        quiz_id,
+        quizzes(title)
       `)
-      .eq("teacher_id", user.id)
       .in("status", ["waiting", "active", "finished", "completed"])
       .order("started_at", { ascending: false });
 
-    if (data) setSessions(data);
+    if (ownedQuizIds.length > 0) {
+      sessionsQuery = sessionsQuery.or(`teacher_id.eq.${user.id},quiz_id.in.(${ownedQuizIds.join(",")})`);
+    } else {
+      sessionsQuery = sessionsQuery.eq("teacher_id", user.id);
+    }
+
+    const { data: sessionsData, error: sessionsError } = await sessionsQuery;
+    if (sessionsError) {
+      console.error("Failed to fetch report sessions:", sessionsError.message);
+      setSessions([]);
+      setLoading(false);
+      return;
+    }
+
+    const sessionRows = sessionsData || [];
+    if (sessionRows.length === 0) {
+      setSessions([]);
+      setLoading(false);
+      return;
+    }
+
+    const sessionIds = sessionRows.map((row: any) => row.id);
+    const { data: participantsData, error: participantsError } = await supabase
+      .from("participants")
+      .select("id, session_id, display_name, score, cheat_flags, is_banned")
+      .in("session_id", sessionIds);
+
+    if (participantsError) {
+      console.warn("Participants not available for reports:", participantsError.message);
+    }
+
+    const participantsBySession = new Map<string, any[]>();
+    (participantsData || []).forEach((participant: any) => {
+      if (participant.is_banned) return;
+      const existing = participantsBySession.get(participant.session_id) || [];
+      existing.push(participant);
+      participantsBySession.set(participant.session_id, existing);
+    });
+
+    const hydratedSessions = sessionRows.map((sess: any) => ({
+      ...sess,
+      participants: participantsBySession.get(sess.id) || [],
+    }));
+
+    setSessions(hydratedSessions);
     setLoading(false);
   };
 
