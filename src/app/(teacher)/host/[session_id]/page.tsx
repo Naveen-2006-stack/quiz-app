@@ -42,7 +42,12 @@ export default function HostRoom() {
   const router = useRouter();
   const params = useParams();
   const sessionId = params.session_id as string;
-  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+  const configuredBaseUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").trim().replace(/\/$/, "");
+  const runtimeOrigin = typeof window !== "undefined" ? window.location.origin.replace(/\/$/, "") : "";
+  const isConfiguredLocalhost = /localhost|127\.0\.0\.1/i.test(configuredBaseUrl);
+  const baseUrl = configuredBaseUrl && !isConfiguredLocalhost
+    ? configuredBaseUrl
+    : (runtimeOrigin || "http://localhost:3000");
 
   const [sessionInfo, setSessionInfo] = useState<LiveSession | null>(null);
   const [questions, setQuestions] = useState<any[]>([]);
@@ -403,6 +408,7 @@ export default function HostRoom() {
   const totalPlayers = participantsList.length;
   const joinCode = sessionInfo?.join_code || "------";
   const joinUrl = `${baseUrl}/join?code=${encodeURIComponent(sessionInfo?.join_code || "")}`;
+  const isJoinUrlLocalOnly = /localhost|127\.0\.0\.1/i.test(joinUrl);
 
   // ───────── ACTIVE / FINISHED screen ─────────
   if (sessionStatus === "active" || sessionStatus === "finished") {
@@ -720,6 +726,11 @@ export default function HostRoom() {
             </div>
             <p className="mt-4 text-sm text-slate-500">Students can join instantly by scanning the QR code.</p>
             <p className="mt-2 text-xs text-slate-400 break-all">{joinUrl}</p>
+            {isJoinUrlLocalOnly && (
+              <p className="mt-2 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                This QR uses localhost and will not open on phones. Set NEXT_PUBLIC_APP_URL to your LAN IP or deployed URL.
+              </p>
+            )}
             <a
               href={joinUrl}
               target="_blank"
