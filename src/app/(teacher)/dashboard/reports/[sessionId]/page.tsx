@@ -20,6 +20,7 @@ type Participant = {
   display_name: string;
   score: number;
   notes?: string;
+  cheat_flags?: number;
 };
 
 type StudentResponse = {
@@ -91,6 +92,7 @@ export default function SessionAnalyticsReportPage() {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [responses, setResponses] = useState<StudentResponse[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [violationCountByParticipant, setViolationCountByParticipant] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (!sessionId) return;
@@ -164,7 +166,7 @@ export default function SessionAnalyticsReportPage() {
         quizzes: quizRel ? { title: quizRel.title } : null,
       });
 
-      const [pRes, rRes, qRes] = await Promise.all([
+      const [pRes, rRes, qRes, vRes] = await Promise.all([
         supabase
           .from("participants")
           .select("id, display_name, score, notes, cheat_flags")
@@ -179,15 +181,28 @@ export default function SessionAnalyticsReportPage() {
           .select("id, question_text, order_index")
           .eq("quiz_id", sData.quiz_id)
           .order("order_index", { ascending: true }),
+        supabase
+          .from("participant_violations")
+          .select("participant_id")
+          .eq("session_id", sessionId),
       ]);
 
       if (pRes.error) throw pRes.error;
       if (rRes.error) throw rRes.error;
       if (qRes.error) throw qRes.error;
+      if (vRes.error) throw vRes.error;
 
       setParticipants((pRes.data || []) as Participant[]);
       setResponses((rRes.data || []) as StudentResponse[]);
       setQuestions((qRes.data || []) as Question[]);
+
+      const violationMap: Record<string, number> = {};
+      (vRes.data || []).forEach((row: any) => {
+        const pid = row.participant_id as string | undefined;
+        if (!pid) return;
+        violationMap[pid] = (violationMap[pid] || 0) + 1;
+      });
+      setViolationCountByParticipant(violationMap);
     } catch (err: any) {
       setError(err?.message || "Failed to load analytics report.");
     } finally {
@@ -213,9 +228,9 @@ export default function SessionAnalyticsReportPage() {
       correctCount: correctByParticipant.get(p.id) || 0,
       totalQuestions: questions.length,
       notes: p.notes || "",
-      cheatCount: (p as any).cheat_flags || 0,
+      cheatCount: Math.max(p.cheat_flags || 0, violationCountByParticipant[p.id] || 0),
     }));
-  }, [participants, responses, questions.length]);
+  }, [participants, responses, questions.length, violationCountByParticipant]);
 
   const questionStats = useMemo<QuestionStat[]>(() => {
     const grouped = new Map<string, { correct: number; incorrect: number }>();

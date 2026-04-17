@@ -112,16 +112,50 @@ function StudentJoinContent() {
       localStorage.setItem("kahoot_device_uuid", deviceUuid);
     }
 
-    const { data: participant, error: partErr } = await supabase
+    const nowIso = new Date().toISOString();
+
+    const { data: existingParticipant, error: existingErr } = await supabase
       .from("participants")
-      .upsert({
-        session_id: session.id,
-        device_uuid: deviceUuid,
-        display_name: name.trim(),
-        last_active: new Date().toISOString()
-      }, { onConflict: "session_id, device_uuid" })
-      .select()
-      .single();
+      .select("id")
+      .eq("session_id", session.id)
+      .eq("device_uuid", deviceUuid)
+      .maybeSingle();
+
+    if (existingErr) {
+      setError("Could not join the session. Try again.");
+      setLoading(false);
+      return;
+    }
+
+    let participant: any = null;
+    let partErr: any = null;
+
+    if (existingParticipant?.id) {
+      const { data, error } = await supabase
+        .from("participants")
+        .update({
+          display_name: name.trim(),
+          last_active: nowIso,
+        })
+        .eq("id", existingParticipant.id)
+        .select()
+        .single();
+      participant = data;
+      partErr = error;
+    } else {
+      const { data, error } = await supabase
+        .from("participants")
+        .insert({
+          session_id: session.id,
+          device_uuid: deviceUuid,
+          display_name: name.trim(),
+          last_active: nowIso,
+        })
+        .select()
+        .single();
+      participant = data;
+      partErr = error;
+    }
 
     if (partErr) {
       setError("Could not join the session. Try again.");
