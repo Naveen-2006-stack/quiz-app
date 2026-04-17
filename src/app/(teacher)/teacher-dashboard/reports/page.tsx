@@ -42,6 +42,23 @@ export default function ReportsDashboard() {
         <p className="text-slate-500 dark:text-slate-400">Review historical data and student performance from your live sessions.</p>
       </div>
 
+      {/* Dashboard Tabs */}
+      <div className="inline-flex rounded-2xl bg-white dark:bg-slate-800 shadow-sm border border-slate-200/70 dark:border-white/10 p-1">
+        <Link
+          href="/teacher-dashboard"
+          className="px-5 py-2.5 rounded-xl text-slate-500 dark:text-slate-400 font-semibold hover:text-slate-900 dark:hover:text-white transition-colors"
+        >
+          My Quizzes
+        </Link>
+        <button
+          type="button"
+          aria-current="page"
+          className="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white font-semibold shadow-sm transition-colors"
+        >
+          Reports
+        </button>
+      </div>
+
       {loading ? (
         <div className="animate-pulse space-y-4">
           {[1,2,3].map(i => <div key={i} className="h-32 bg-white dark:bg-slate-800 rounded-3xl border border-gray-100 dark:border-white/5" />)}

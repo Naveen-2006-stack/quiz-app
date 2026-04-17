@@ -135,22 +135,11 @@ export default function SessionAnalyticsReportPage() {
         return;
       }
 
-      let isParticipant = false;
-      const deviceUuid = typeof window !== "undefined" ? localStorage.getItem("kahoot_device_uuid") : null;
-      if (deviceUuid) {
-        const { data: participant } = await supabase
-          .from("participants")
-          .select("id")
-          .eq("session_id", sessionId)
-          .eq("device_uuid", deviceUuid)
-          .maybeSingle();
-        isParticipant = !!participant;
-      }
-
       const isHost = (sData as any).teacher_id === user.id;
-      if (!isAdmin && !isHost && !isParticipant) {
-        setError("Could not load this report. It may not exist or you may not have access.");
+      if (!isAdmin && !isHost) {
+        setError("Only the host can view the full session report.");
         setLoading(false);
+        router.replace("/dashboard");
         return;
       }
 

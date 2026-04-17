@@ -381,7 +381,7 @@ export default function HostRoom() {
       // Update local state immediately, then route to the report page.
       setSessionStatus("finished");
       setAdvancingQuestion(false);
-      router.replace(`/dashboard/reports/${sessionId}`);
+      router.replace(`/teacher-dashboard/reports`);
       return;
     } else {
       await supabase
@@ -489,7 +489,7 @@ export default function HostRoom() {
     hasAutoRedirectedToReportRef.current = true;
 
     const timer = setTimeout(() => {
-      router.replace(`/dashboard/reports/${sessionId}`);
+      router.replace(`/teacher-dashboard/reports`);
     }, 700);
 
     return () => clearTimeout(timer);
