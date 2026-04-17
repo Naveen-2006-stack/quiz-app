@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase/client";
 import { useLiveSession } from "@/hooks/useLiveSession";
 import { useGameStore } from "@/store/useGameStore";
 import { motion, AnimatePresence } from "framer-motion";
-import { Users, Play, Copy, Check, ArrowLeft, CheckSquare, LayoutDashboard, ShieldAlert, XCircle, Trash2, Eye, EyeOff, ExternalLink } from "lucide-react";
+import { Users, Play, Copy, Check, ArrowLeft, CheckSquare, LayoutDashboard, ShieldAlert, XCircle, Trash2, Eye, EyeOff } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { cn } from "@/lib/utils";
 
@@ -237,6 +237,29 @@ export default function HostRoom() {
 
     return () => clearInterval(heartbeat);
   }, [sessionId, sessionStatus]);
+
+  // Fallback participant sync: keeps host roster accurate even if realtime
+  // postgres change events are delayed/missed in production.
+  useEffect(() => {
+    if (!sessionId || (sessionStatus !== "waiting" && sessionStatus !== "active")) return;
+
+    const refreshParticipants = async () => {
+      const { data, error } = await supabase
+        .from("participants")
+        .select("id, session_id, device_uuid, display_name, score, streak, cheat_flags, last_active, joined_at, is_banned")
+        .eq("session_id", sessionId);
+
+      if (error || !data) return;
+      setParticipants(data.filter((p: any) => !p.is_banned));
+    };
+
+    void refreshParticipants();
+    const interval = setInterval(() => {
+      void refreshParticipants();
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [sessionId, sessionStatus, setParticipants]);
 
   const fetchSession = async () => {
     const { data: sData } = await supabase
@@ -731,14 +754,6 @@ export default function HostRoom() {
                 This QR uses localhost and will not open on phones. Set NEXT_PUBLIC_APP_URL to your LAN IP or deployed URL.
               </p>
             )}
-            <a
-              href={joinUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition-colors"
-            >
-              Open Join Page <ExternalLink size={14} />
-            </a>
           </div>
 
           <div className="justify-self-center md:justify-self-end">

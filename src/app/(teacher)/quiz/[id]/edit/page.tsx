@@ -229,14 +229,14 @@ export default function QuizEditor() {
         </div>
 
         {/* Timer-based Scoring Toggle */}
-        <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-900/50 rounded-2xl border border-gray-100 dark:border-white/5">
-          <div>
+        <div className="flex items-start sm:items-center justify-between gap-4 p-4 bg-gray-50 dark:bg-slate-900/50 rounded-2xl border border-gray-100 dark:border-white/5">
+          <div className="min-w-0 flex-1">
             <h3 className="text-sm font-bold text-slate-800 dark:text-white">Timer-based Scoring</h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Faster answers get more points when enabled</p>
           </div>
           <button
             onClick={() => setQuiz({ ...quiz, timer_based_marking: !quiz.timer_based_marking })}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ring-2 ring-offset-2 ring-transparent focus:ring-indigo-500 ${quiz.timer_based_marking ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-slate-700'
+            className={`relative inline-flex h-6 w-11 shrink-0 self-start sm:self-center mt-0.5 sm:mt-0 items-center rounded-full transition-colors focus:outline-none ring-2 ring-offset-2 ring-transparent focus:ring-indigo-500 ${quiz.timer_based_marking ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-slate-700'
               }`}
           >
             <span
@@ -247,14 +247,14 @@ export default function QuizEditor() {
         </div>
 
         {/* Test Mode Toggle */}
-        <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-900/50 rounded-2xl border border-gray-100 dark:border-white/5">
-          <div>
+        <div className="flex items-start sm:items-center justify-between gap-4 p-4 bg-gray-50 dark:bg-slate-900/50 rounded-2xl border border-gray-100 dark:border-white/5">
+          <div className="min-w-0 flex-1">
             <h3 className="text-sm font-bold text-slate-800 dark:text-white">Test Mode</h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">When on, students cannot see their marks or the final leaderboard — only you can</p>
           </div>
           <button
             onClick={() => setQuiz({ ...quiz, test_mode: !quiz.test_mode })}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ring-2 ring-offset-2 ring-transparent focus:ring-violet-500 ${quiz.test_mode ? 'bg-violet-600' : 'bg-gray-300 dark:bg-slate-700'
+            className={`relative inline-flex h-6 w-11 shrink-0 self-start sm:self-center mt-0.5 sm:mt-0 items-center rounded-full transition-colors focus:outline-none ring-2 ring-offset-2 ring-transparent focus:ring-violet-500 ${quiz.test_mode ? 'bg-violet-600' : 'bg-gray-300 dark:bg-slate-700'
               }`}
           >
             <span
