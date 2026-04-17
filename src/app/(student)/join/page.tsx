@@ -38,7 +38,14 @@ function StudentJoinContent() {
     const { data: { session } } = await supabase.auth.getSession();
     const user = session?.user;
     if (!user) {
-      router.push("/login?message=Please sign in to join a game");
+      const currentPath = typeof window !== "undefined"
+        ? `${window.location.pathname}${window.location.search}`
+        : "/join";
+      const loginParams = new URLSearchParams({
+        message: "Please sign in to join a game",
+        next: currentPath,
+      });
+      router.push(`/login?${loginParams.toString()}`);
       return;
     }
 

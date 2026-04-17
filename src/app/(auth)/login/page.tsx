@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { supabase } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { Loader2, ArrowLeft } from "lucide-react";
 import Link from "next/link";
@@ -12,15 +12,21 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [googleLoading, setGoogleLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const handleGoogleLogin = async () => {
     setGoogleLoading(true);
     setError("");
+
+    const requestedNext = searchParams.get("next") ?? "/dashboard";
+    const safeNext = requestedNext.startsWith("/") ? requestedNext : "/dashboard";
+    const callbackParams = new URLSearchParams({ next: safeNext });
+
     // Use the origin from window so it supports localhost in dev and Vercel branch URLs in prod
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
+        redirectTo: `${window.location.origin}/auth/callback?${callbackParams.toString()}`,
         queryParams: {
           prompt: "select_account",
         },

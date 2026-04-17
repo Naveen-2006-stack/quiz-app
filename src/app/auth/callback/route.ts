@@ -7,6 +7,7 @@ export async function GET(request: Request) {
   const code = searchParams.get('code')
   // if "next" is in param, use it as the redirect URL
   const next = searchParams.get('next') ?? '/dashboard'
+  const safeNext = next.startsWith('/') ? next : '/dashboard'
 
   if (code) {
     const cookieStore = await cookies()
@@ -37,7 +38,7 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     
     if (!error) {
-      const redirectPath = next
+      const redirectPath = safeNext
 
       const {
         data: { user },
