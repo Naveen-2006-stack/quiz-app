@@ -8,6 +8,7 @@ interface Participant {
   score: number;
   streak: number;
   cheat_flags: number;
+  last_active?: string;
 }
 
 interface GameState {

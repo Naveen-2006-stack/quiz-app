@@ -75,6 +75,7 @@ export default function HostRoom() {
   const controlChannelRef = useRef<any>(null);
   const latestSessionStatusRef = useRef<string>("waiting");
   const hasAutoCompletedRef = useRef(false);
+  const inactivityViolationRef = useRef<Record<string, number>>({});
 
   // Zustand game store
   const participantsMap = useGameStore((s) => s.participants);
@@ -174,6 +175,16 @@ export default function HostRoom() {
           ...prev,
         ]);
       })
+      .subscribe();
+    return () => { void supabase.removeChannel(gameRoomChannel); };
+  }, [sessionId]);
+
+  // Emoji reaction listener (matches student broadcast channel)
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const emojiChannel = supabase
+      .channel(`game-room:${sessionId}`)
       .on("broadcast", { event: "emoji_reaction" }, (payload: any) => {
         const emoji = payload?.payload?.emoji as string | undefined;
         const studentName = payload?.payload?.studentName as string | undefined;
@@ -188,7 +199,8 @@ export default function HostRoom() {
         }, 2000);
       })
       .subscribe();
-    return () => { void supabase.removeChannel(gameRoomChannel); };
+
+    return () => { void supabase.removeChannel(emojiChannel); };
   }, [sessionId]);
 
   // ── Feature 3: Live Submission Counter ──
@@ -225,6 +237,32 @@ export default function HostRoom() {
 
     return () => { void supabase.removeChannel(subChannel); };
   }, [sessionId, questions, currentQuestionIndex]);
+
+  // Fallback submitted-counter sync: if realtime INSERT events are missed,
+  // periodically recompute count from DB so host UI stays accurate.
+  useEffect(() => {
+    if (!sessionId || sessionStatus !== "active" || !questions[currentQuestionIndex]) return;
+    const qId = questions[currentQuestionIndex]?.id;
+    if (!qId) return;
+
+    const refreshSubmissionCount = async () => {
+      const { count, error } = await supabase
+        .from("student_responses")
+        .select("id", { count: "exact", head: true })
+        .eq("session_id", sessionId)
+        .eq("question_id", qId);
+
+      if (error) return;
+      setSubmissionCount(count ?? 0);
+    };
+
+    void refreshSubmissionCount();
+    const interval = setInterval(() => {
+      void refreshSubmissionCount();
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [sessionId, sessionStatus, questions, currentQuestionIndex]);
 
   // Keep session alive while host tab is open in waiting/active states.
   useEffect(() => {
@@ -432,6 +470,49 @@ export default function HostRoom() {
   const joinCode = sessionInfo?.join_code || "------";
   const joinUrl = `${baseUrl}/join?code=${encodeURIComponent(sessionInfo?.join_code || "")}`;
   const isJoinUrlLocalOnly = /localhost|127\.0\.0\.1/i.test(joinUrl);
+
+  // Anti-cheat fallback: detect background/disconnected students from stale heartbeat.
+  useEffect(() => {
+    if (sessionStatus !== "active" || !sessionId) return;
+
+    const now = Date.now();
+    const staleThresholdMs = 15000;
+    const duplicateCooldownMs = 30000;
+
+    participantsList.forEach((p: any) => {
+      if (!p?.id || !p?.last_active) return;
+      const lastActiveMs = new Date(p.last_active).getTime();
+      if (!Number.isFinite(lastActiveMs)) return;
+
+      const isStale = now - lastActiveMs > staleThresholdMs;
+      if (!isStale) return;
+
+      const lastFlaggedAt = inactivityViolationRef.current[p.id] ?? 0;
+      if (now - lastFlaggedAt < duplicateCooldownMs) return;
+
+      inactivityViolationRef.current[p.id] = now;
+
+      const violationType = "App Backgrounded / Inactive";
+      incrementCheatFlag(p.id);
+      setLiveViolations((prev: any) => [
+        {
+          id: Date.now() + Math.random(),
+          violation_type: violationType,
+          created_at: new Date().toISOString(),
+          source: "live" as const,
+          studentId: p.id,
+          studentName: p.display_name,
+        },
+        ...prev,
+      ]);
+
+      void supabase.rpc("log_violation", {
+        p_session_id: sessionId,
+        p_participant_id: p.id,
+        p_violation_type: violationType,
+      });
+    });
+  }, [participantsList, sessionStatus, sessionId, incrementCheatFlag]);
 
   // ───────── ACTIVE / FINISHED screen ─────────
   if (sessionStatus === "active" || sessionStatus === "finished") {

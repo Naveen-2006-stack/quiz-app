@@ -113,6 +113,39 @@ export default function StudentPlayRoom() {
     };
   }, [sessionId, setCurrentQuestionIndex, setSessionStatus]);
 
+  // Fallback sync for session status/index in case realtime events are missed.
+  // This keeps student screens in lockstep with host actions without manual refresh.
+  useEffect(() => {
+    if (!sessionId || loading) return;
+
+    const refreshSessionState = async () => {
+      const { data, error } = await supabase
+        .from("live_sessions")
+        .select("status, current_question_index")
+        .eq("id", sessionId)
+        .single();
+
+      if (error || !data) return;
+
+      setSessionInfo((prev: any) => (prev ? { ...prev, ...data } : prev));
+
+      if (data.status) {
+        setSessionStatus(data.status as any);
+      }
+
+      if (typeof data.current_question_index === "number") {
+        setCurrentQuestionIndex(data.current_question_index);
+      }
+    };
+
+    void refreshSessionState();
+    const interval = setInterval(() => {
+      void refreshSessionState();
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [sessionId, loading, setCurrentQuestionIndex, setSessionStatus]);
+
   // Auto-save notes (only after initial notes have been loaded from DB to avoid overwriting)
   useEffect(() => {
     if (!participantId || !sessionId || !notesInitializedRef.current) return;
@@ -136,13 +169,11 @@ export default function StudentPlayRoom() {
     if (!sessionId || !participantId || sessionStatus !== "active") return;
 
     // Global multi-event cooldown: prevents a single physical action that fires
-    // multiple events (e.g. alt-tab fires both blur + visibilitychange) from sending
-    // duplicate strikes. 3s window is enough to coalesce burst events.
+    // multiple events (e.g. app switch triggers blur + visibilitychange) from
+    // generating duplicate violations.
     let strikeCooldown = false;
-    let visibilityTimer: ReturnType<typeof setTimeout> | null = null;
     let blurDebounceTimer: ReturnType<typeof setTimeout> | null = null;
     let mouseLeaveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-    let isUnloading = false;
 
     // Create the anti-cheat broadcast channel once for this effect's lifecycle.
     // We use a distinct channel reference here (not reactionChannelRef) so that
@@ -168,23 +199,15 @@ export default function StudentPlayRoom() {
       });
     };
 
-    // ── 1. TAB SWITCH / MINIMIZE (visibilitychange) ──
-    // Deferred 200ms to distinguish from a page unload (which also hides the tab).
+    // ── 1. APP BACKGROUND / TAB HIDDEN ──
+    // Fire immediately on hidden so mobile app-switching is captured before WebView suspension.
     const onVisibilityChange = () => {
       if (document.hidden) {
-        visibilityTimer = setTimeout(() => {
-          if (!isUnloading) void triggerStrike("Tab Switch / Minimized");
-        }, 200);
-      } else {
-        // Tab became visible again — cancel any pending visibility timer
-        if (visibilityTimer !== null) { clearTimeout(visibilityTimer); visibilityTimer = null; }
+        void triggerStrike("App Backgrounded / Tab Hidden");
       }
     };
 
     const onPageLeave = () => {
-      isUnloading = true;
-      if (visibilityTimer !== null) { clearTimeout(visibilityTimer); visibilityTimer = null; }
-
       if (strikeCooldown) return;
       strikeCooldown = true;
 
@@ -275,7 +298,6 @@ export default function StudentPlayRoom() {
 
     return () => {
       // Clear all pending debounce timers before removing listeners
-      if (visibilityTimer !== null) clearTimeout(visibilityTimer);
       if (blurDebounceTimer !== null) clearTimeout(blurDebounceTimer);
       if (mouseLeaveDebounceTimer !== null) clearTimeout(mouseLeaveDebounceTimer);
 
@@ -291,6 +313,40 @@ export default function StudentPlayRoom() {
       void supabase.removeChannel(gameRoomChannel);
     };
   }, [sessionId, participantId, participantName, sessionStatus]);
+
+  // Keep participant heartbeat fresh while the student is in-session.
+  // Host-side anti-cheat uses this to detect app-background/disconnect gaps.
+  useEffect(() => {
+    if (!sessionId || !participantId || (sessionStatus !== "waiting" && sessionStatus !== "active")) return;
+
+    const touchParticipant = async () => {
+      await supabase
+        .from("participants")
+        .update({ last_active: new Date().toISOString() })
+        .eq("id", participantId)
+        .eq("session_id", sessionId);
+    };
+
+    const onVisible = () => {
+      if (!document.hidden) {
+        void touchParticipant();
+      }
+    };
+
+    void touchParticipant();
+    const interval = setInterval(() => {
+      if (!document.hidden) {
+        void touchParticipant();
+      }
+    }, 5000);
+
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [sessionId, participantId, sessionStatus]);
 
   // ── Emoji reactions: send + receive on the SAME game-room channel as the host ──
   // Previously the student used a separate 'emoji-room' channel which meant
