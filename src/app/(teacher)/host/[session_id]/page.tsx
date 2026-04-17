@@ -377,6 +377,12 @@ export default function HostRoom() {
         .from("live_sessions")
         .update({ status: "finished", finished_at: new Date().toISOString(), last_activity_at: new Date().toISOString() })
         .eq("id", sessionId);
+
+      // Update local state immediately, then route to the report page.
+      setSessionStatus("finished");
+      setAdvancingQuestion(false);
+      router.replace(`/dashboard/reports/${sessionId}`);
+      return;
     } else {
       await supabase
         .from("live_sessions")

@@ -174,16 +174,44 @@ export default function StudentPlayRoom() {
     let strikeCooldown = false;
     let blurDebounceTimer: ReturnType<typeof setTimeout> | null = null;
     let mouseLeaveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastKeepaliveStrikeAt = 0;
 
     // Create the anti-cheat broadcast channel once for this effect's lifecycle.
     // We use a distinct channel reference here (not reactionChannelRef) so that
     // cleanup of this effect doesn't destroy the emoji channel and vice-versa.
     const gameRoomChannel = supabase.channel(`anticheat-room:${sessionId}`).subscribe();
 
-    const triggerStrike = async (type: string) => {
+    const triggerStrike = async (type: string, useKeepalive = false) => {
       if (strikeCooldown) return;
       strikeCooldown = true;
       setTimeout(() => { strikeCooldown = false; }, 3000);
+
+      if (useKeepalive) {
+        const now = Date.now();
+        if (now - lastKeepaliveStrikeAt < 3000) return;
+        lastKeepaliveStrikeAt = now;
+
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+        if (supabaseUrl && supabaseKey && participantId && sessionId && authTokenRef.current) {
+          fetch(`${supabaseUrl}/rest/v1/rpc/log_violation`, {
+            method: "POST",
+            keepalive: true,
+            headers: {
+              "apikey": supabaseKey,
+              "Authorization": `Bearer ${authTokenRef.current}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              p_session_id: sessionId,
+              p_participant_id: participantId,
+              p_violation_type: type,
+            }),
+          }).catch(() => {});
+
+          return;
+        }
+      }
 
       // Best-effort broadcast — host sees it in real-time
       void gameRoomChannel.send({
@@ -203,37 +231,12 @@ export default function StudentPlayRoom() {
     // Fire immediately on hidden so mobile app-switching is captured before WebView suspension.
     const onVisibilityChange = () => {
       if (document.hidden) {
-        void triggerStrike("App Backgrounded / Tab Hidden");
+        void triggerStrike("App Backgrounded / Tab Hidden", true);
       }
     };
 
     const onPageLeave = () => {
-      if (strikeCooldown) return;
-      strikeCooldown = true;
-
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-      if (supabaseUrl && supabaseKey && participantId && sessionId && authTokenRef.current) {
-        fetch(`${supabaseUrl}/rest/v1/rpc/log_violation`, {
-          method: "POST",
-          keepalive: true,
-          headers: {
-            "apikey": supabaseKey,
-            "Authorization": `Bearer ${authTokenRef.current}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            p_session_id: sessionId,
-            p_participant_id: participantId,
-            p_violation_type: "Page Refresh / Leave",
-          }),
-        }).catch(() => {});
-      }
-      gameRoomChannel.send({
-        type: "broadcast",
-        event: "anti_cheat_violation",
-        payload: { studentName: participantName, studentId: participantId, violationType: "Page Refresh / Leave" },
-      }).catch(() => {});
+      void triggerStrike("Page Refresh / Leave", true);
     };
 
     // ── 3. WINDOW BLUR (alt-tab, mobile notification, switching to another app) ──
@@ -300,6 +303,10 @@ export default function StudentPlayRoom() {
     document.addEventListener("mouseenter", onMouseEnter);
     document.addEventListener("contextmenu", onContextMenu);
     document.addEventListener("keydown", onKeyDown);
+    const onFreeze = () => {
+      void triggerStrike("App Frozen / Backgrounded", true);
+    };
+    document.addEventListener("freeze" as any, onFreeze as any);
 
     return () => {
       // Clear all pending debounce timers before removing listeners
@@ -315,6 +322,7 @@ export default function StudentPlayRoom() {
       document.removeEventListener("mouseenter", onMouseEnter);
       document.removeEventListener("contextmenu", onContextMenu);
       document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("freeze" as any, onFreeze as any);
       void supabase.removeChannel(gameRoomChannel);
     };
   }, [sessionId, participantId, participantName, sessionStatus]);
