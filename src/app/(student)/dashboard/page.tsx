@@ -464,35 +464,35 @@ export default function UnifiedDashboard() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: idx * 0.04 }}
-                    className="bg-white dark:bg-slate-800 rounded-2xl px-6 py-5 shadow-sm border border-slate-200/60 dark:border-white/5"
+                    className="bg-white dark:bg-slate-800 rounded-2xl px-4 sm:px-6 py-4 sm:py-5 shadow-sm border border-slate-200/60 dark:border-white/5"
                   >
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <h3 className="font-bold text-slate-900 dark:text-white text-lg">{session.quizzes?.title || "Unknown Quiz"}</h3>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">
-                          {session.status === "active" ? "Live now" : "Played on"} {new Date(session.finished_at || session.started_at || Date.now()).toLocaleString()}
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-bold text-slate-900 dark:text-white text-base sm:text-lg truncate">{session.quizzes?.title || "Unknown Quiz"}</h3>
+                        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+                          {session.status === "active" ? "Live now" : "Played on"} {new Date(session.finished_at || session.started_at || Date.now()).toLocaleDateString()}
                         </p>
                       </div>
                       <Link
                         href={`/dashboard/reports/${session.id}`}
-                        className="inline-flex items-center justify-center rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/20"
+                        className="w-full sm:w-auto inline-flex items-center justify-center rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 sm:py-1.5 text-xs font-bold text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/20 whitespace-nowrap"
                       >
-                        View Full Analytics
+                        View Analytics
                       </Link>
                     </div>
 
-                    <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div className="rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-white/5 p-4">
-                        <div className="text-xs font-semibold text-slate-500">Players</div>
-                        <div className="mt-1 text-2xl font-black text-slate-900 dark:text-white">{totalPlayers}</div>
+                    <div className="mt-4 sm:mt-5 grid grid-cols-3 gap-2 sm:gap-3">
+                      <div className="rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-white/5 p-3 sm:p-4">
+                        <div className="text-xs font-semibold text-slate-500 truncate">Players</div>
+                        <div className="mt-1 text-xl sm:text-2xl font-black text-slate-900 dark:text-white">{totalPlayers}</div>
                       </div>
-                      <div className="rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-white/5 p-4">
-                        <div className="text-xs font-semibold text-slate-500">Top Score</div>
-                        <div className="mt-1 text-2xl font-black text-slate-900 dark:text-white">{topScore}</div>
+                      <div className="rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-white/5 p-3 sm:p-4">
+                        <div className="text-xs font-semibold text-slate-500 truncate">Top Score</div>
+                        <div className="mt-1 text-xl sm:text-2xl font-black text-slate-900 dark:text-white">{topScore}</div>
                       </div>
-                      <div className="rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-white/5 p-4">
-                        <div className="text-xs font-semibold text-slate-500">Cheat Flags</div>
-                        <div className="mt-1 text-2xl font-black text-slate-900 dark:text-white">{totalCheats}</div>
+                      <div className="rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-white/5 p-3 sm:p-4">
+                        <div className="text-xs font-semibold text-slate-500 truncate">Cheats</div>
+                        <div className="mt-1 text-xl sm:text-2xl font-black text-slate-900 dark:text-white">{totalCheats}</div>
                       </div>
                     </div>
                   </motion.div>
