@@ -76,6 +76,7 @@ export default function HostRoom() {
   const latestSessionStatusRef = useRef<string>("waiting");
   const hasAutoCompletedRef = useRef(false);
   const inactivityViolationRef = useRef<Record<string, number>>({});
+  const hasAutoRedirectedToReportRef = useRef(false);
 
   // Zustand game store
   const participantsMap = useGameStore((s) => s.participants);
@@ -470,6 +471,23 @@ export default function HostRoom() {
   const joinCode = sessionInfo?.join_code || "------";
   const joinUrl = `${baseUrl}/join?code=${encodeURIComponent(sessionInfo?.join_code || "")}`;
   const isJoinUrlLocalOnly = /localhost|127\.0\.0\.1/i.test(joinUrl);
+
+  // Auto-redirect host once the session is finished (last question or End Game).
+  useEffect(() => {
+    if (sessionStatus !== "finished" || !sessionId) {
+      hasAutoRedirectedToReportRef.current = false;
+      return;
+    }
+
+    if (hasAutoRedirectedToReportRef.current) return;
+    hasAutoRedirectedToReportRef.current = true;
+
+    const timer = setTimeout(() => {
+      router.replace(`/dashboard/reports/${sessionId}`);
+    }, 700);
+
+    return () => clearTimeout(timer);
+  }, [sessionStatus, sessionId, router]);
 
   // Anti-cheat fallback: detect background/disconnected students from stale heartbeat.
   useEffect(() => {
