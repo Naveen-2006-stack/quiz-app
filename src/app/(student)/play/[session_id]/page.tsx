@@ -181,11 +181,12 @@ export default function StudentPlayRoom() {
       }
     };
 
-    // ── 2. PAGE LEAVE / REFRESH (beforeunload + pagehide) ──
-    // Uses fetch with keepalive=true for reliable logging even after the page closes.
     const onPageLeave = () => {
       isUnloading = true;
       if (visibilityTimer !== null) { clearTimeout(visibilityTimer); visibilityTimer = null; }
+
+      if (strikeCooldown) return;
+      strikeCooldown = true;
 
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
       const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -205,14 +206,11 @@ export default function StudentPlayRoom() {
           }),
         }).catch(() => {});
       }
-      if (!strikeCooldown) {
-        strikeCooldown = true;
-        gameRoomChannel.send({
-          type: "broadcast",
-          event: "anti_cheat_violation",
-          payload: { studentName: participantName, studentId: participantId, violationType: "Page Refresh / Leave" },
-        }).catch(() => {});
-      }
+      gameRoomChannel.send({
+        type: "broadcast",
+        event: "anti_cheat_violation",
+        payload: { studentName: participantName, studentId: participantId, violationType: "Page Refresh / Leave" },
+      }).catch(() => {});
     };
 
     // ── 3. WINDOW BLUR (alt-tab, mobile notification, switching to another app) ──

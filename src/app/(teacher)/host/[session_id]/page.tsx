@@ -362,13 +362,11 @@ export default function HostRoom() {
     setLoadingViolations(true);
     setViolationsHistory([]);
     try {
-      // 1. Load persisted violations from DB
-      const { data: dbData } = await supabase
-        .from("participant_violations")
-        .select("*")
-        .eq("participant_id", pId)
-        .eq("session_id", sessionId)
-        .order("created_at", { ascending: false });
+      // 1. Load persisted violations from DB using the secure RPC to bypass RLS selection issues
+      const { data: dbData } = await supabase.rpc("fetch_violations_for_host", {
+        p_session_id: sessionId,
+        p_participant_id: pId
+      });
 
       // 2. Pull live events for this specific student from in-memory feed
       const liveForStudent = liveViolations
