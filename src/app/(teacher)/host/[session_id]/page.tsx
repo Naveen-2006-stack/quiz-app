@@ -361,6 +361,7 @@ export default function HostRoom() {
   const nextQuestion = async () => {
     if (!questions.length || advancingQuestion) return;
     setAdvancingQuestion(true);
+    const nextQuestionIndex = currentQuestionIndex + 1;
 
     // Broadcast reveal-answer event to all students
     await controlChannelRef.current?.send({
@@ -372,24 +373,58 @@ export default function HostRoom() {
     await new Promise((r) => setTimeout(r, 1400));
 
     const isLast = currentQuestionIndex >= questions.length - 1;
-    if (isLast) {
-      await supabase
-        .from("live_sessions")
-        .update({ status: "finished", finished_at: new Date().toISOString(), last_activity_at: new Date().toISOString() })
-        .eq("id", sessionId);
+    try {
+      const { error: advanceError } = await supabase.rpc("advance_live_session_question", {
+        p_session_id: sessionId,
+        p_next_question_index: nextQuestionIndex,
+        p_finish: isLast,
+      });
 
-      // Update local state immediately, then route to the report page.
-      setSessionStatus("finished");
+      if (advanceError) {
+        const missingRpc = /Could not find the function|function .* does not exist/i.test(advanceError.message || "");
+
+        if (!missingRpc) {
+          throw advanceError;
+        }
+
+        const { data: { session } } = await supabase.auth.getSession();
+        const fallbackUpdate = isLast
+          ? {
+              status: "finished" as const,
+              finished_at: new Date().toISOString(),
+              last_activity_at: new Date().toISOString(),
+            }
+          : {
+              current_question_index: nextQuestionIndex,
+              last_activity_at: new Date().toISOString(),
+            };
+
+        const { error: updateError } = await supabase
+          .from("live_sessions")
+          .update(fallbackUpdate)
+          .eq("id", sessionId)
+          .eq("teacher_id", session?.user?.id);
+
+        if (updateError) {
+          throw updateError;
+        }
+      }
+
+      setCurrentQuestionIndex(nextQuestionIndex);
+      await touchSessionActivity();
+
+      if (isLast) {
+        setSessionStatus("finished");
+        router.replace(`/teacher-dashboard/reports`);
+        return;
+      }
+
+      setSessionStatus("active");
+    } catch (err) {
+      console.error("Failed to advance question:", err);
+    } finally {
       setAdvancingQuestion(false);
-      router.replace(`/teacher-dashboard/reports`);
-      return;
-    } else {
-      await supabase
-        .from("live_sessions")
-        .update({ current_question_index: currentQuestionIndex + 1, last_activity_at: new Date().toISOString() })
-        .eq("id", sessionId);
     }
-    setAdvancingQuestion(false);
   };
 
   const kickParticipant = async (pId: string) => {
