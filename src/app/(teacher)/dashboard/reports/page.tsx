@@ -16,28 +16,105 @@ export default function ReportsDashboard() {
 
   const fetchFinishedSessions = async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
 
-    // Fetch live + completed sessions and inner join quizzes and participants
-    const { data } = await supabase
+    const reportStatuses = ["waiting", "active", "finished", "completed"];
+    const { data: ownedQuizzes } = await supabase
+      .from("quizzes")
+      .select("id")
+      .eq("teacher_id", user.id);
+
+    const ownedQuizIds = (ownedQuizzes || []).map((quiz: any) => quiz.id);
+    const sessionSelect = `
+      id,
+      status,
+      started_at,
+      finished_at,
+      join_code,
+      quiz_id,
+      quizzes(title)
+    `;
+
+    const { data: teacherSessions, error: teacherSessionsError } = await supabase
       .from("live_sessions")
-      .select(`
-        *,
-        quizzes(title),
-        participants!inner(id, display_name, score, cheat_flags, is_banned)
-      `)
+      .select(sessionSelect)
       .eq("teacher_id", user.id)
-      .in("status", ["active", "finished", "completed"])
+      .in("status", reportStatuses)
       .order("started_at", { ascending: false });
 
-    if (data) {
-      // Exclude banned participants from each session's participant list
-      const cleaned = data.map(sess => ({
-        ...sess,
-        participants: (sess.participants || []).filter((p: any) => !p.is_banned)
-      }));
-      setSessions(cleaned);
+    let legacySessions: any[] = [];
+    let legacySessionsError: { message: string } | null = null;
+
+    if (ownedQuizIds.length > 0) {
+      const { data, error } = await supabase
+        .from("live_sessions")
+        .select(sessionSelect)
+        .in("quiz_id", ownedQuizIds)
+        .in("status", reportStatuses)
+        .order("started_at", { ascending: false });
+      legacySessions = data || [];
+      legacySessionsError = error;
     }
+
+    if (teacherSessionsError || legacySessionsError) {
+      console.error(
+        "Failed to fetch report sessions:",
+        teacherSessionsError?.message || legacySessionsError?.message || "Unknown error"
+      );
+      setSessions([]);
+      setLoading(false);
+      return;
+    }
+
+    const mergedById = new Map<string, any>();
+    (teacherSessions || []).forEach((sessionRow: any) => {
+      mergedById.set(sessionRow.id, sessionRow);
+    });
+    legacySessions.forEach((sessionRow: any) => {
+      if (!mergedById.has(sessionRow.id)) {
+        mergedById.set(sessionRow.id, sessionRow);
+      }
+    });
+
+    const sessionRows = Array.from(mergedById.values()).sort((a: any, b: any) => {
+      const aTime = new Date(a.started_at || a.finished_at || 0).getTime();
+      const bTime = new Date(b.started_at || b.finished_at || 0).getTime();
+      return bTime - aTime;
+    });
+
+    if (sessionRows.length === 0) {
+      setSessions([]);
+      setLoading(false);
+      return;
+    }
+
+    const sessionIds = sessionRows.map((row: any) => row.id);
+    const { data: participantsData, error: participantsError } = await supabase
+      .from("participants")
+      .select("id, session_id, display_name, score, cheat_flags, is_banned")
+      .in("session_id", sessionIds);
+
+    if (participantsError) {
+      console.warn("Participants not available for reports:", participantsError.message);
+    }
+
+    const participantsBySession = new Map<string, any[]>();
+    (participantsData || []).forEach((participant: any) => {
+      if (participant.is_banned) return;
+      const existing = participantsBySession.get(participant.session_id) || [];
+      existing.push(participant);
+      participantsBySession.set(participant.session_id, existing);
+    });
+
+    const cleaned = sessionRows.map((sessionRow: any) => ({
+      ...sessionRow,
+      participants: participantsBySession.get(sessionRow.id) || [],
+    }));
+
+    setSessions(cleaned);
     setLoading(false);
   };
 

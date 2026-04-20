@@ -67,6 +67,7 @@ export default function StudentPlayRoom() {
 
   // Universal emoji floats — same logic as Host screen
   const [floatingEmojis, setFloatingEmojis] = useState<FloatingEmoji[]>([]);
+  const hasMarkedLeftRef = useRef(false);
 
   // Student realtime sync: follow host-driven session updates from live_sessions.
   useEffect(() => {
@@ -181,6 +182,39 @@ export default function StudentPlayRoom() {
     // cleanup of this effect doesn't destroy the emoji channel and vice-versa.
     const gameRoomChannel = supabase.channel(`anticheat-room:${sessionId}`).subscribe();
 
+    const markParticipantLeft = async (reason: string, useKeepalive = false) => {
+      if (!participantId || hasMarkedLeftRef.current) return;
+      hasMarkedLeftRef.current = true;
+
+      if (useKeepalive) {
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+        if (supabaseUrl && supabaseKey && authTokenRef.current) {
+          fetch(`${supabaseUrl}/rest/v1/rpc/mark_participant_left`, {
+            method: "POST",
+            keepalive: true,
+            headers: {
+              "apikey": supabaseKey,
+              "Authorization": `Bearer ${authTokenRef.current}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              p_session_id: sessionId,
+              p_participant_id: participantId,
+              p_reason: reason,
+            }),
+          }).catch(() => {});
+          return;
+        }
+      }
+
+      await supabase.rpc("mark_participant_left", {
+        p_session_id: sessionId,
+        p_participant_id: participantId,
+        p_reason: reason,
+      });
+    };
+
     const triggerStrike = async (type: string, useKeepalive = false) => {
       if (strikeCooldown) return;
       strikeCooldown = true;
@@ -208,8 +242,6 @@ export default function StudentPlayRoom() {
               p_violation_type: type,
             }),
           }).catch(() => {});
-
-          return;
         }
       }
 
@@ -236,6 +268,7 @@ export default function StudentPlayRoom() {
     };
 
     const onPageLeave = () => {
+      void markParticipantLeft("Left session during active quiz", true);
       void triggerStrike("Page Refresh / Leave", true);
     };
 
@@ -649,6 +682,29 @@ export default function StudentPlayRoom() {
   const handleLeaveGame = async () => {
     if (!participantId || !sessionId) return;
     try {
+      if (sessionStatus === "active") {
+        await supabase.rpc("mark_participant_left", {
+          p_session_id: sessionId,
+          p_participant_id: participantId,
+          p_reason: "Left session during active quiz",
+        });
+
+        if (reactionChannelRef.current) {
+          await reactionChannelRef.current.send({
+            type: "broadcast",
+            event: "anti_cheat_violation",
+            payload: {
+              studentName: participantName,
+              studentId: participantId,
+              violationType: "Left session during active quiz",
+            },
+          });
+        }
+
+        router.push("/dashboard?error=left-session");
+        return;
+      }
+
       // 1. Database Cleanup
       await supabase
         .from("participants")

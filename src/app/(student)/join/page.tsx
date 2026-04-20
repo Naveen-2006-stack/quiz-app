@@ -15,6 +15,7 @@ function StudentJoinContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
   const nicknameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -59,6 +60,7 @@ function StudentJoinContent() {
       || "Player";
 
     setName(displayName);
+    setAuthUserId(user.id);
     setIsAuthenticated(true);
     setLoading(false);
   };
@@ -114,15 +116,27 @@ function StudentJoinContent() {
 
     const nowIso = new Date().toISOString();
 
+    if (!authUserId) {
+      setError("Sign in again to join this game.");
+      setLoading(false);
+      return;
+    }
+
     const { data: existingParticipant, error: existingErr } = await supabase
       .from("participants")
-      .select("id")
+      .select("id, is_banned")
       .eq("session_id", session.id)
-      .eq("device_uuid", deviceUuid)
+      .or(`device_uuid.eq.${deviceUuid},user_id.eq.${authUserId}`)
       .maybeSingle();
 
     if (existingErr) {
       setError("Could not join the session. Try again.");
+      setLoading(false);
+      return;
+    }
+
+    if (existingParticipant?.is_banned) {
+      setError("You left this quiz already and cannot rejoin this session.");
       setLoading(false);
       return;
     }
@@ -136,8 +150,10 @@ function StudentJoinContent() {
         .update({
           display_name: name.trim(),
           last_active: nowIso,
+          user_id: authUserId,
         })
         .eq("id", existingParticipant.id)
+        .eq("is_banned", false)
         .select()
         .single();
       participant = data;
@@ -148,6 +164,7 @@ function StudentJoinContent() {
         .insert({
           session_id: session.id,
           device_uuid: deviceUuid,
+          user_id: authUserId,
           display_name: name.trim(),
           last_active: nowIso,
         })
