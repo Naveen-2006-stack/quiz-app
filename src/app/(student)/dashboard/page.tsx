@@ -205,6 +205,7 @@ export default function UnifiedDashboard() {
 
   const fetchReports = async (userId: string) => {
     setLoadingReports(true);
+    const reportStatuses = ["waiting", "active", "finished", "completed"];
 
     // Include legacy sessions where teacher_id may be missing by resolving through owned quiz IDs.
     const { data: ownedQuizzes } = await supabase
@@ -214,9 +215,7 @@ export default function UnifiedDashboard() {
 
     const ownedQuizIds = (ownedQuizzes || []).map((quiz: any) => quiz.id);
 
-    let sessionsQuery = supabase
-      .from("live_sessions")
-      .select(`
+    const sessionSelect = `
         id,
         status,
         started_at,
@@ -224,24 +223,55 @@ export default function UnifiedDashboard() {
         join_code,
         quiz_id,
         quizzes(title)
-      `)
-      .in("status", ["waiting", "active", "finished", "completed"])
+      `;
+
+    const { data: teacherSessions, error: teacherSessionsError } = await supabase
+      .from("live_sessions")
+      .select(sessionSelect)
+      .eq("teacher_id", userId)
+      .in("status", reportStatuses)
       .order("started_at", { ascending: false });
 
+    let legacySessions: any[] = [];
+    let legacySessionsError: { message: string } | null = null;
+
     if (ownedQuizIds.length > 0) {
-      sessionsQuery = sessionsQuery.or(`teacher_id.eq.${userId},quiz_id.in.(${ownedQuizIds.join(",")})`);
-    } else {
-      sessionsQuery = sessionsQuery.eq("teacher_id", userId);
+      const { data, error } = await supabase
+        .from("live_sessions")
+        .select(sessionSelect)
+        .in("quiz_id", ownedQuizIds)
+        .in("status", reportStatuses)
+        .order("started_at", { ascending: false });
+
+      legacySessions = data || [];
+      legacySessionsError = error;
     }
 
-    const { data: sessions, error: sessionsError } = await sessionsQuery;
-
-    if (sessionsError) {
-      console.error("Failed to fetch report sessions:", sessionsError.message);
+    if (teacherSessionsError || legacySessionsError) {
+      console.error(
+        "Failed to fetch report sessions:",
+        teacherSessionsError?.message || legacySessionsError?.message || "Unknown error"
+      );
       setReportSessions([]);
       setLoadingReports(false);
       return;
     }
+
+    const mergedById = new Map<string, any>();
+    (teacherSessions || []).forEach((session: any) => {
+      mergedById.set(session.id, session);
+    });
+    legacySessions.forEach((session: any) => {
+      if (!mergedById.has(session.id)) {
+        mergedById.set(session.id, session);
+      }
+    });
+
+    const sessions = Array.from(mergedById.values()).sort((a: any, b: any) => {
+      const aTime = new Date(a.started_at || a.finished_at || 0).getTime();
+      const bTime = new Date(b.started_at || b.finished_at || 0).getTime();
+      return bTime - aTime;
+    });
 
     const sessionRows = sessions || [];
     if (sessionRows.length === 0) {
