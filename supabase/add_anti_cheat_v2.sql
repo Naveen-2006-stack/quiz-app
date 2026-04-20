@@ -82,6 +82,8 @@ DECLARE
   v_is_banned BOOLEAN;
   v_session_status TEXT;
   v_timer_enabled BOOLEAN;
+  v_selected_texts TEXT[] := ARRAY[]::TEXT[];
+  v_correct_texts TEXT[] := ARRAY[]::TEXT[];
 BEGIN
   -- 1. Security Checks
   SELECT is_banned INTO v_is_banned FROM participants WHERE id = p_participant_id;
@@ -94,21 +96,56 @@ BEGIN
     RAISE EXCEPTION 'Session is not active';
   END IF;
 
+  -- Parse student selection. Supports either:
+  -- 1) plain text (single answer)
+  -- 2) JSON array string (multiple selected answers)
+  IF p_option_text IS NOT NULL AND BTRIM(p_option_text) <> '' THEN
+    IF LEFT(BTRIM(p_option_text), 1) = '[' THEN
+      BEGIN
+        SELECT COALESCE(
+          array_agg(BTRIM(LOWER(v)) ORDER BY BTRIM(LOWER(v))),
+          ARRAY[]::TEXT[]
+        )
+        INTO v_selected_texts
+        FROM jsonb_array_elements_text(p_option_text::jsonb) AS t(v)
+        WHERE BTRIM(v) <> '';
+      EXCEPTION WHEN others THEN
+        v_selected_texts := ARRAY[BTRIM(LOWER(p_option_text))];
+      END;
+    ELSE
+      v_selected_texts := ARRAY[BTRIM(LOWER(p_option_text))];
+    END IF;
+  END IF;
+
   -- 2. Validate Answer
-  -- Get question metadata and check if the selected text matches ANY correct option.
+  -- Get question metadata and compare selected set against the correct-answer set.
   SELECT 
     base_points, 
     (time_limit * 1000),
     COALESCE(qz.timer_based_marking, true),
-    EXISTS (
-      SELECT 1 FROM jsonb_array_elements(q.options) AS e 
+    COALESCE((
+      SELECT array_agg(BTRIM(LOWER(e->>'text')) ORDER BY BTRIM(LOWER(e->>'text')))
+      FROM jsonb_array_elements(q.options) AS e
       WHERE (e->>'is_correct' = 'true' OR e->>'is_correct' = '1')
-      AND BTRIM(LOWER(e->>'text')) = BTRIM(LOWER(p_option_text))
-    )
-  INTO v_base_points, v_max_time_ms, v_timer_enabled, v_is_correct
+      AND BTRIM(COALESCE(e->>'text', '')) <> ''
+    ), ARRAY[]::TEXT[])
+  INTO v_base_points, v_max_time_ms, v_timer_enabled, v_correct_texts
   FROM questions q
   JOIN quizzes qz ON qz.id = q.quiz_id
   WHERE q.id = p_question_id;
+
+  -- Normalize to a distinct sorted set and enforce exact set matching.
+  SELECT COALESCE(array_agg(v ORDER BY v), ARRAY[]::TEXT[])
+  INTO v_selected_texts
+  FROM (
+    SELECT DISTINCT BTRIM(LOWER(x)) AS v
+    FROM unnest(v_selected_texts) AS u(x)
+    WHERE BTRIM(COALESCE(x, '')) <> ''
+  ) d;
+
+  v_is_correct :=
+    cardinality(v_selected_texts) > 0
+    AND v_selected_texts = v_correct_texts;
 
   -- 3. Calculate Points & Streak BEFORE updating rows
   IF v_is_correct THEN

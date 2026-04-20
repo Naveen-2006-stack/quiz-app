@@ -33,7 +33,7 @@ interface ActiveQuestionCardProps {
   isRevealed: boolean;
   /** Server-confirmed result from submit_answer_v2 RPC */
   wasAnswerCorrect?: boolean | null;
-  onAnswer: (index: number, reactionTimeMs: number) => Promise<void> | void;
+  onAnswer: (indices: number[], reactionTimeMs: number) => Promise<void> | void;
   /** Ghost Mode: when true, the correct answer button gets the secret micro-tell dot */
   isGhostMode?: boolean;
   isAlreadyAnswered?: boolean;
@@ -55,7 +55,7 @@ export const ActiveQuestionCard = ({
   isTestMode = false,
 }: ActiveQuestionCardProps) => {
   const [timeLeft, setTimeLeft] = useState(timeLimit);
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null); // highlighted but not yet submitted
+  const [selectedIndices, setSelectedIndices] = useState<number[]>([]); // highlighted but not yet submitted
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [shuffledOptions, setShuffledOptions] = useState<{ text: string; is_correct: boolean; originalIndex: number }[]>([]);
@@ -64,7 +64,7 @@ export const ActiveQuestionCard = ({
   // Reset state when the question changes
   useEffect(() => {
     setTimeLeft(timeLimit);
-    setSelectedIndex(null);
+    setSelectedIndices([]);
     setHasSubmitted(false);
     setSubmitting(false);
     startTimeRef.current = Date.now();
@@ -98,27 +98,24 @@ export const ActiveQuestionCard = ({
   }, [isRevealed, hasSubmitted]);
 
   const handleConfirmSubmit = async (overrideIdx?: number, timedOut?: boolean) => {
-    const idx = overrideIdx !== undefined ? overrideIdx : selectedIndex;
-    if (idx === null || hasSubmitted || submitting) return;
+    const indices = overrideIdx !== undefined ? [overrideIdx] : selectedIndices;
+    if (indices.length === 0 || hasSubmitted || submitting) return;
     setSubmitting(true);
     setHasSubmitted(true);
     const reactionMs = Date.now() - startTimeRef.current;
 
-    // Use originalIndex for submission so the backend/teacher knows which choice was really picked
-    await onAnswer(idx, reactionMs); // Directly use idx as options are now server-shuffled
+    await onAnswer(indices, reactionMs);
     setSubmitting(false);
   };
 
-  const currentSelectionIdx = selectedIndex !== null && selectedIndex >= 0
-    ? selectedIndex
-    : null;
+  const currentSelectionIdx = selectedIndices.length ? selectedIndices[0] : null;
 
   // Use server-confirmed result (wasAnswerCorrect) when available; fall back to client-side is_correct
   const didAnswerCorrectly =
     isRevealed && hasSubmitted
       ? wasAnswerCorrect !== null && wasAnswerCorrect !== undefined
         ? wasAnswerCorrect
-        : (selectedIndex !== null && selectedIndex >= 0 ? !!shuffledOptions[selectedIndex]?.is_correct : false)
+        : (selectedIndices.length > 0 ? selectedIndices.every((idx) => !!shuffledOptions[idx]?.is_correct) : false)
       : false;
 
   const showReveal = isRevealed && hasSubmitted;
@@ -270,14 +267,22 @@ export const ActiveQuestionCard = ({
                       : { bg: 'bg-blue-500', hover: 'hover:bg-blue-600', border: 'border-blue-400', text: 'text-white', label: 'bg-blue-600', depth: 'shadow-[0_5px_0_rgba(29,78,216,0.45)] dark:shadow-none' })
                     : OPTION_COLORS[idx % OPTION_COLORS.length];
 
-                  const isSelected = selectedIndex === idx;
+                  const isSelected = selectedIndices.includes(idx);
 
                   return (
                     <motion.button
                       key={idx}
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.97 }}
-                      onClick={() => setSelectedIndex(idx)}
+                      onClick={() => {
+                        if (isTrueFalse) {
+                          setSelectedIndices([idx]);
+                          return;
+                        }
+                        setSelectedIndices((prev) =>
+                          prev.includes(idx) ? prev.filter((v) => v !== idx) : [...prev, idx]
+                        );
+                      }}
                       className={cn(
                         'relative w-full text-left rounded-[1.5rem] font-bold transition-all duration-200 border-4 min-h-[48px]',
                         isTrueFalse ? 'p-8 text-3xl' : 'p-5 text-lg',
@@ -319,7 +324,7 @@ export const ActiveQuestionCard = ({
 
               {/* Confirm Button — Fixed to bottom for mobile ergonomics */}
               <AnimatePresence>
-                {selectedIndex !== null && (
+                {selectedIndices.length > 0 && (
                   <motion.div
                     key="confirm-wrapper"
                     initial={{ opacity: 0, y: 50 }}
@@ -332,7 +337,7 @@ export const ActiveQuestionCard = ({
                       disabled={submitting}
                       className="w-full max-w-2xl py-4 rounded-2xl bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white text-xl font-black tracking-tight shadow-xl transition-all disabled:opacity-60"
                     >
-                      {submitting ? 'Submitting…' : '✓ Confirm & Submit'}
+                      {submitting ? 'Submitting…' : `✓ Confirm ${selectedIndices.length} Selection${selectedIndices.length > 1 ? 's' : ''}`}
                     </button>
                   </motion.div>
                 )}

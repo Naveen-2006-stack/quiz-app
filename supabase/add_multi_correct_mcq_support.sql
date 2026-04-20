@@ -1,0 +1,156 @@
+-- Support multiple-correct MCQ submissions in submit_answer_v2.
+-- Student payload can be either:
+-- 1) single text (legacy)
+-- 2) JSON array string of selected option texts (new)
+
+CREATE OR REPLACE FUNCTION public.submit_answer_v2(
+  p_session_id UUID,
+  p_participant_id UUID,
+  p_question_id UUID,
+  p_option_index INTEGER,
+  p_option_text TEXT,
+  p_reaction_time_ms INTEGER
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_is_correct BOOLEAN;
+  v_base_points INTEGER;
+  v_max_time_ms INTEGER;
+  v_points_awarded INTEGER := 0;
+  v_current_streak INTEGER;
+  v_streak_bonus INTEGER := 0;
+  v_is_banned BOOLEAN;
+  v_session_status TEXT;
+  v_timer_enabled BOOLEAN;
+  v_selected_texts TEXT[] := ARRAY[]::TEXT[];
+  v_correct_texts TEXT[] := ARRAY[]::TEXT[];
+BEGIN
+  -- 1. Security checks
+  SELECT is_banned INTO v_is_banned FROM participants WHERE id = p_participant_id;
+  IF v_is_banned THEN
+    RAISE EXCEPTION 'Player is banned';
+  END IF;
+
+  SELECT status INTO v_session_status FROM live_sessions WHERE id = p_session_id;
+  IF v_session_status != 'active' THEN
+    RAISE EXCEPTION 'Session is not active';
+  END IF;
+
+  -- Parse student selection payload.
+  IF p_option_text IS NOT NULL AND BTRIM(p_option_text) <> '' THEN
+    IF LEFT(BTRIM(p_option_text), 1) = '[' THEN
+      BEGIN
+        SELECT COALESCE(
+          array_agg(BTRIM(LOWER(v)) ORDER BY BTRIM(LOWER(v))),
+          ARRAY[]::TEXT[]
+        )
+        INTO v_selected_texts
+        FROM jsonb_array_elements_text(p_option_text::jsonb) AS t(v)
+        WHERE BTRIM(v) <> '';
+      EXCEPTION WHEN others THEN
+        v_selected_texts := ARRAY[BTRIM(LOWER(p_option_text))];
+      END;
+    ELSE
+      v_selected_texts := ARRAY[BTRIM(LOWER(p_option_text))];
+    END IF;
+  END IF;
+
+  -- 2. Validate answer against exact correct-answer set.
+  SELECT
+    q.base_points,
+    (q.time_limit * 1000),
+    COALESCE(qz.timer_based_marking, true),
+    COALESCE((
+      SELECT array_agg(BTRIM(LOWER(e->>'text')) ORDER BY BTRIM(LOWER(e->>'text')))
+      FROM jsonb_array_elements(q.options) AS e
+      WHERE (e->>'is_correct' = 'true' OR e->>'is_correct' = '1')
+        AND BTRIM(COALESCE(e->>'text', '')) <> ''
+    ), ARRAY[]::TEXT[])
+  INTO v_base_points, v_max_time_ms, v_timer_enabled, v_correct_texts
+  FROM questions q
+  JOIN quizzes qz ON qz.id = q.quiz_id
+  WHERE q.id = p_question_id;
+
+  SELECT COALESCE(array_agg(v ORDER BY v), ARRAY[]::TEXT[])
+  INTO v_selected_texts
+  FROM (
+    SELECT DISTINCT BTRIM(LOWER(x)) AS v
+    FROM unnest(v_selected_texts) AS u(x)
+    WHERE BTRIM(COALESCE(x, '')) <> ''
+  ) d;
+
+  v_is_correct :=
+    cardinality(v_selected_texts) > 0
+    AND v_selected_texts = v_correct_texts;
+
+  -- 3. Calculate points and streak.
+  IF v_is_correct THEN
+    IF v_timer_enabled THEN
+      v_points_awarded := ROUND(
+        v_base_points * 0.5
+        + v_base_points * 0.5 * (GREATEST(0, v_max_time_ms - p_reaction_time_ms)::float / GREATEST(1, v_max_time_ms))
+      );
+    ELSE
+      v_points_awarded := v_base_points;
+    END IF;
+
+    UPDATE participants
+    SET streak = streak + 1
+    WHERE id = p_participant_id
+    RETURNING streak INTO v_current_streak;
+
+    IF v_current_streak >= 3 THEN
+      v_streak_bonus := LEAST(300, v_current_streak * 50);
+      v_points_awarded := v_points_awarded + v_streak_bonus;
+    END IF;
+
+    UPDATE participants
+    SET score = score + v_points_awarded
+    WHERE id = p_participant_id;
+  ELSE
+    UPDATE participants
+    SET streak = 0
+    WHERE id = p_participant_id;
+
+    v_current_streak := 0;
+  END IF;
+
+  -- 4. Record response.
+  BEGIN
+    INSERT INTO student_responses (
+      session_id,
+      participant_id,
+      question_id,
+      reaction_time_ms,
+      is_correct,
+      points_awarded,
+      streak_bonus
+    ) VALUES (
+      p_session_id,
+      p_participant_id,
+      p_question_id,
+      p_reaction_time_ms,
+      v_is_correct,
+      v_points_awarded,
+      v_streak_bonus
+    );
+  EXCEPTION WHEN unique_violation THEN
+    RETURN jsonb_build_object(
+      'is_correct', false,
+      'points_awarded', 0,
+      'new_streak', 0,
+      'error', 'Already answered'
+    );
+  END;
+
+  RETURN jsonb_build_object(
+    'is_correct', v_is_correct,
+    'points_awarded', v_points_awarded,
+    'new_streak', v_current_streak
+  );
+END;
+$$;

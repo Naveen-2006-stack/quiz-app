@@ -84,7 +84,9 @@ export default function QuizEditor() {
   const setCorrectOption = (qIndex: number, oIndex: number) => {
     setQuestions(prev => prev.map((q, i) => {
       if (i !== qIndex) return q;
-      const newOptions = q.options.map((opt, j) => ({ ...opt, is_correct: j === oIndex }));
+      const newOptions = q.question_type === "true_false"
+        ? q.options.map((opt, j) => ({ ...opt, is_correct: j === oIndex }))
+        : q.options.map((opt, j) => (j === oIndex ? { ...opt, is_correct: !opt.is_correct } : opt));
       return { ...q, options: newOptions };
     }));
   };
@@ -147,6 +149,12 @@ export default function QuizEditor() {
       // 2. Upsert Questions one by one
       for (let i = 0; i < questions.length; i++) {
         const q = questions[i];
+        const hasCorrectAnswer = q.options.some((opt) => !!opt.is_correct);
+        if (!hasCorrectAnswer) {
+          errors.push(`Question ${i + 1}: mark at least one correct answer.`);
+          continue;
+        }
+
         const payload = {
           quiz_id: quizId,
           question_text: q.question_text,
@@ -372,6 +380,7 @@ export default function QuizEditor() {
                         onClick={() => setCorrectOption(qIdx, oIdx)}
                         className={`p-2 rounded-lg transition-colors ${opt.is_correct ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-300 hover:text-slate-500 dark:text-slate-600 dark:hover:text-slate-400'
                           }`}
+                        title={opt.is_correct ? "Marked correct (click to unmark)" : "Click to mark as correct"}
                       >
                         <CheckCircle2 size={24} className={opt.is_correct ? 'fill-emerald-100 dark:fill-emerald-900/30' : ''} />
                       </button>

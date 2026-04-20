@@ -613,22 +613,29 @@ export default function StudentPlayRoom() {
     setLoading(false);
   };
 
-  const handleAnswerSubmit = async (optionIdx: number, reactionMs: number) => {
+  const handleAnswerSubmit = async (optionIndices: number[], reactionMs: number) => {
     if (!participantId || !questions.length) return;
 
     const q = questions[currentQuestionIndex];
     if (!q) return;
 
-    const selectedOpt = q.options[optionIdx];
-    const optionText = selectedOpt?.text || "";
+    const normalizedIndices = Array.from(new Set(optionIndices.filter((idx) => idx >= 0)));
+    const selectedOptionTexts = normalizedIndices
+      .map((idx) => q.options[idx]?.text)
+      .filter((text: string | undefined): text is string => !!text && text.trim().length > 0);
+
+    const optionTextPayload =
+      selectedOptionTexts.length <= 1
+        ? (selectedOptionTexts[0] || "")
+        : JSON.stringify(selectedOptionTexts);
 
     // ── Try Secure Submission v2 RPC first ──
     const { data, error } = await supabase.rpc("submit_answer_v2", {
       p_session_id: sessionId,
       p_participant_id: participantId,
       p_question_id: q.id,
-      p_option_index: optionIdx,
-      p_option_text: optionText,
+      p_option_index: normalizedIndices[0] ?? -1,
+      p_option_text: optionTextPayload,
       p_reaction_time_ms: reactionMs
     });
 
@@ -638,10 +645,17 @@ export default function StudentPlayRoom() {
       // ── Fallback: RPC not deployed, use direct DB writes ──
       if (error.message.includes("Could not find the function") || error.details?.includes("Could not find the function")) {
         console.warn("submit_answer_v2 RPC not found, using fallback submission.");
-        // Because get_questions_for_student strips is_correct, we can't trust selectedOpt.is_correct.
-        // It's going to evaluate to false. We just assume true or fallback gracefully.
-        // To properly fix this, submit_answer_v2 RPC MUST be deployed.
-        const isCorrect = !!(selectedOpt?.is_correct);
+        const selectedSet = new Set(selectedOptionTexts.map((text) => text.trim().toLowerCase()));
+        const correctSet = new Set(
+          (q.options as any[])
+            .filter((opt: any) => !!opt?.is_correct)
+            .map((opt: any) => String(opt.text || "").trim().toLowerCase())
+            .filter((text: string) => text.length > 0)
+        );
+        const isCorrect =
+          selectedSet.size > 0 &&
+          selectedSet.size === correctSet.size &&
+          [...selectedSet].every((text) => correctSet.has(text));
         const points = isCorrect ? 1000 : 0;
 
         // Record the response (ignore conflict = duplicate submission)
