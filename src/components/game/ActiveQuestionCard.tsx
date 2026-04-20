@@ -245,8 +245,8 @@ export const ActiveQuestionCard = ({
                 className="mx-auto mb-5 h-14 w-14 rounded-full border-4 border-indigo-200 border-t-indigo-600 dark:border-indigo-700 dark:border-t-indigo-400"
               />
               <h3 className="text-2xl font-extrabold text-slate-900 dark:text-white mb-1">
-                {selectedIndex !== null && selectedIndex >= 0
-                  ? `You picked: ${shuffledOptions[selectedIndex]?.text}`
+                {currentSelectionIdx !== null && currentSelectionIdx >= 0
+                  ? `You picked: ${shuffledOptions[currentSelectionIdx]?.text}`
                   : "Time's up!"}
               </h3>
               <p className="text-slate-500 dark:text-slate-400">Waiting for reveal...</p>
