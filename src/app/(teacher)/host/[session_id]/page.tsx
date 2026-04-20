@@ -114,7 +114,7 @@ export default function HostRoom() {
       hasAutoCompletedRef.current = true;
       void supabase
         .from("live_sessions")
-        .update({ status: "completed", finished_at: new Date().toISOString() })
+        .update({ status: "finished", finished_at: new Date().toISOString() })
         .eq("id", sessionId)
         .in("status", ["active", "waiting"]);
     };

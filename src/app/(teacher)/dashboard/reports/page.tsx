@@ -21,7 +21,7 @@ export default function ReportsDashboard() {
       return;
     }
 
-    const reportStatuses = ["waiting", "active", "finished", "completed"];
+    const reportStatuses = ["waiting", "active", "finished"];
     const { data: ownedQuizzes } = await supabase
       .from("quizzes")
       .select("id")

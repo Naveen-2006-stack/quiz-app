@@ -67,7 +67,6 @@ export default function AdminDashboard() {
       const conducted = sessionRows.filter((s) =>
         s.status === "active" ||
         s.status === "finished" ||
-        s.status === "completed" ||
         !!s.started_at ||
         !!s.finished_at
       );
@@ -159,7 +158,7 @@ export default function AdminDashboard() {
     const completedAt = new Date().toISOString();
     const { error } = await supabase
       .from("live_sessions")
-      .update({ status: "completed", finished_at: completedAt })
+      .update({ status: "finished", finished_at: completedAt })
       .eq("id", sessionToKill)
       .in("status", ["active", "waiting"]);
 

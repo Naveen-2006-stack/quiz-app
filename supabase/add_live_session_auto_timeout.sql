@@ -1,5 +1,5 @@
 -- Auto-timeout support for stale live sessions
--- Marks waiting/active sessions as completed after 2 hours of inactivity.
+-- Marks waiting/active sessions as finished after 2 hours of inactivity.
 
 ALTER TABLE public.live_sessions
   ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ,
@@ -27,7 +27,7 @@ DECLARE
 BEGIN
   UPDATE public.live_sessions
   SET
-    status = 'completed',
+    status = 'finished',
     finished_at = NOW(),
     ended_reason = 'auto_timeout_2h'
   WHERE status IN ('waiting', 'active')

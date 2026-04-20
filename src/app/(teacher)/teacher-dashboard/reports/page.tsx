@@ -21,7 +21,7 @@ export default function ReportsDashboard() {
       setLoading(false);
       return;
     }
-    const reportStatuses = ["waiting", "active", "finished", "completed"];
+    const reportStatuses = ["waiting", "active", "finished"];
 
     // Include legacy sessions where teacher_id may be missing by resolving through owned quiz IDs.
     const { data: ownedQuizzes } = await supabase
