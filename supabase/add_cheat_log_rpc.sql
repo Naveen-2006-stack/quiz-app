@@ -52,7 +52,8 @@ REVOKE EXECUTE ON FUNCTION public.fetch_violations_for_host(UUID, UUID) FROM ano
 -- 2. cheat_logs VIEW — convenience alias over participant_violations.
 --    Allows the admin dashboard or future tooling to query "cheat_logs" directly
 --    without a schema migration if the underlying table name ever changes.
-CREATE OR REPLACE VIEW public.cheat_logs AS
+CREATE OR REPLACE VIEW public.cheat_logs
+WITH (security_invoker = true) AS
   SELECT
     id,
     session_id,
