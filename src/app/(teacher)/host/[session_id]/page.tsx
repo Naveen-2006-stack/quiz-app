@@ -577,6 +577,25 @@ export default function HostRoom() {
   if (sessionStatus === "active" || sessionStatus === "finished") {
     const sortedParticipants = [...participantsList].sort((a, b) => b.score - a.score);
     const activeQ = questions[currentQuestionIndex];
+    const activeQuestionType = (activeQ?.question_type || "mcq") as "mcq" | "true_false" | "multi_select";
+    const typeMeta =
+      activeQuestionType === "true_false"
+        ? {
+            label: "True / False",
+            className: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/30",
+            hint: "Single-answer question",
+          }
+        : activeQuestionType === "multi_select"
+          ? {
+              label: "Multiple Choice",
+              className: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/30",
+              hint: "Participants must choose all correct answers",
+            }
+          : {
+              label: "Normal",
+              className: "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/30",
+              hint: "Single-answer question",
+            };
 
     return (
       <div className="max-w-7xl mx-auto py-8 px-4">
@@ -607,6 +626,15 @@ export default function HostRoom() {
                 Question {currentQuestionIndex + 1} of {questions.length}
               </span>
 
+              <span
+                className={cn(
+                  "px-4 py-2 rounded-xl text-sm font-bold border",
+                  typeMeta.className
+                )}
+              >
+                {typeMeta.label}
+              </span>
+
               {/* ── Feature 3: Submission Counter Badge ── */}
               <div className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30">
                 <CheckSquare size={18} className="text-emerald-600 dark:text-emerald-400" />
@@ -621,9 +649,14 @@ export default function HostRoom() {
             </div>
 
             <div className="flex justify-between items-start gap-4 mb-8">
-              <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white leading-tight flex-1">
-                {activeQ.question_text}
-              </h2>
+              <div className="flex-1">
+                <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white leading-tight">
+                  {activeQ.question_text}
+                </h2>
+                <p className="mt-2 text-sm font-semibold text-slate-500 dark:text-slate-400">
+                  {typeMeta.hint}
+                </p>
+              </div>
               <button 
                 onClick={() => setIsAnswersHidden(!isAnswersHidden)}
                 className={cn(
