@@ -1,4 +1,4 @@
--- Add support for question_type: mcq | true_false
+-- Add support for question_type: mcq | true_false | multi_select
 -- Run in Supabase SQL Editor for existing databases.
 
 ALTER TABLE public.questions
@@ -20,7 +20,7 @@ BEGIN
   ) THEN
     ALTER TABLE public.questions
     ADD CONSTRAINT questions_question_type_check
-    CHECK (question_type IN ('mcq', 'true_false'));
+    CHECK (question_type IN ('mcq', 'true_false', 'multi_select'));
   END IF;
 END $$;
 

@@ -8,7 +8,7 @@ import { Save, Plus, Trash2, ArrowLeft, GripVertical, CheckCircle2 } from "lucid
 import Link from "next/link";
 
 interface Option { text: string; is_correct: boolean; }
-type QuestionType = "mcq" | "true_false";
+type QuestionType = "mcq" | "true_false" | "multi_select";
 interface Question { id: string; question_text: string; question_type: QuestionType; time_limit: number; base_points: number; options: Option[]; order_index: number; _isNew?: boolean; }
 interface Quiz { id: string; title: string; description: string; timer_based_marking?: boolean; test_mode?: boolean; }
 
@@ -19,10 +19,17 @@ const getMcqDefaultOptions = (): Option[] => [
   { text: "", is_correct: false },
 ];
 
-const TRUE_FALSE_OPTIONS: Option[] = [
-  { text: "True", is_correct: true },
-  { text: "False", is_correct: false },
-];
+const normalizeQuestionType = (q: any): QuestionType => {
+  if (q?.question_type === "true_false" || q?.question_type === "multi_select" || q?.question_type === "mcq") {
+    return q.question_type;
+  }
+
+  const correctCount = Array.isArray(q?.options)
+    ? q.options.filter((o: any) => !!o?.is_correct).length
+    : 0;
+
+  return correctCount > 1 ? "multi_select" : "mcq";
+};
 
 export default function QuizEditor() {
   const router = useRouter();
@@ -48,7 +55,7 @@ export default function QuizEditor() {
     if (qsData) {
       const normalized = (qsData as any[]).map((q) => ({
         ...q,
-        question_type: (q.question_type || "mcq") as QuestionType,
+        question_type: normalizeQuestionType(q),
         options: Array.isArray(q.options) ? q.options : getMcqDefaultOptions(),
       }));
       setQuestions(normalized as Question[]);
@@ -84,7 +91,7 @@ export default function QuizEditor() {
   const setCorrectOption = (qIndex: number, oIndex: number) => {
     setQuestions(prev => prev.map((q, i) => {
       if (i !== qIndex) return q;
-      const newOptions = q.question_type === "true_false"
+      const newOptions = q.question_type === "true_false" || q.question_type === "mcq"
         ? q.options.map((opt, j) => ({ ...opt, is_correct: j === oIndex }))
         : q.options.map((opt, j) => (j === oIndex ? { ...opt, is_correct: !opt.is_correct } : opt));
       return { ...q, options: newOptions };
@@ -109,6 +116,25 @@ export default function QuizEditor() {
           { text: "False", is_correct: !trueShouldBeCorrect },
         ],
       };
+    } else if (nextType === "multi_select") {
+      const prev = current.options;
+      const padded = [
+        prev[0] ? { ...prev[0] } : { text: "", is_correct: true },
+        prev[1] ? { ...prev[1] } : { text: "", is_correct: false },
+        prev[2] ? { ...prev[2] } : { text: "", is_correct: false },
+        prev[3] ? { ...prev[3] } : { text: "", is_correct: false },
+      ];
+
+      // Ensure at least one correct answer exists.
+      if (!padded.some((o) => o.is_correct)) {
+        padded[0].is_correct = true;
+      }
+
+      updated[qIndex] = {
+        ...current,
+        question_type: "multi_select",
+        options: padded,
+      };
     } else {
       const prev = current.options;
       const padded = [
@@ -120,7 +146,8 @@ export default function QuizEditor() {
       updated[qIndex] = {
         ...current,
         question_type: "mcq",
-        options: padded,
+        // Normal MCQ should have exactly one correct answer.
+        options: padded.map((opt, idx) => ({ ...opt, is_correct: idx === 0 })),
       };
     }
 
@@ -316,7 +343,8 @@ export default function QuizEditor() {
                         onChange={e => setQuestionType(qIdx, e.target.value as QuestionType)}
                         className="bg-transparent text-slate-900 dark:text-white font-semibold outline-none cursor-pointer"
                       >
-                        <option value="mcq">Multiple Choice</option>
+                        <option value="mcq">Normal</option>
+                        <option value="multi_select">Multiple Choice</option>
                         <option value="true_false">True / False</option>
                       </select>
                     </div>
@@ -368,6 +396,11 @@ export default function QuizEditor() {
                 </div>
               ) : (
                 <div className="ml-9 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {q.question_type === "multi_select" && (
+                    <div className="md:col-span-2 mb-1 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                      Multiple Choice: mark all correct options for this question.
+                    </div>
+                  )}
                   {q.options.map((opt, oIdx) => (
                     <div
                       key={oIdx}

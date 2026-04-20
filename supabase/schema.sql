@@ -25,7 +25,7 @@ CREATE TABLE questions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   quiz_id UUID REFERENCES quizzes(id) ON DELETE CASCADE,
   question_text TEXT NOT NULL,
-  question_type TEXT NOT NULL DEFAULT 'mcq' CHECK (question_type IN ('mcq', 'true_false')),
+  question_type TEXT NOT NULL DEFAULT 'mcq' CHECK (question_type IN ('mcq', 'true_false', 'multi_select')),
   options JSONB NOT NULL, -- Array of {text: string, is_correct: boolean}
   time_limit INTEGER DEFAULT 40, -- Seconds
   base_points INTEGER DEFAULT 100,

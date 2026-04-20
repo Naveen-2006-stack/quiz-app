@@ -26,7 +26,7 @@ const OPTION_LABELS = ['A', 'B', 'C', 'D'];
 
 interface ActiveQuestionCardProps {
   question: string;
-  questionType?: 'mcq' | 'true_false';
+  questionType?: 'mcq' | 'true_false' | 'multi_select';
   options: { text: string; is_correct?: boolean }[];
   streak: number;
   timeLimit: number; // seconds
@@ -120,6 +120,7 @@ export const ActiveQuestionCard = ({
 
   const showReveal = isRevealed && hasSubmitted;
   const isTrueFalse = questionType === 'true_false';
+  const isMultiSelect = questionType === 'multi_select';
   const timeFraction = timeLeft / timeLimit;
   const timerColor =
     timeFraction > 0.5 ? 'bg-emerald-500' : timeFraction > 0.25 ? 'bg-amber-500' : 'bg-rose-500';
@@ -245,8 +246,8 @@ export const ActiveQuestionCard = ({
                 className="mx-auto mb-5 h-14 w-14 rounded-full border-4 border-indigo-200 border-t-indigo-600 dark:border-indigo-700 dark:border-t-indigo-400"
               />
               <h3 className="text-2xl font-extrabold text-slate-900 dark:text-white mb-1">
-                {currentSelectionIdx !== null && currentSelectionIdx >= 0
-                  ? `You picked: ${shuffledOptions[currentSelectionIdx]?.text}`
+                {selectedIndices.length > 0
+                  ? `You picked: ${selectedIndices.map((idx) => shuffledOptions[idx]?.text).filter(Boolean).join(', ')}`
                   : "Time's up!"}
               </h3>
               <p className="text-slate-500 dark:text-slate-400">Waiting for reveal...</p>
@@ -255,6 +256,11 @@ export const ActiveQuestionCard = ({
             /* ANSWER GRID — Select then Confirm */
           ) : (
             <motion.div key="grid" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              {isMultiSelect && (
+                <div className="mb-4 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">
+                  Multiple Choice question: select all correct answers. More than one option can be right.
+                </div>
+              )}
               <div className={cn('mb-5', isTrueFalse ? 'grid grid-cols-1 sm:grid-cols-2 gap-4' : 'grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-4')}>
                 {shuffledOptions.map((opt, idx) => {
                   const isGhostReveal = isGhostMode && opt.is_correct;
@@ -276,6 +282,10 @@ export const ActiveQuestionCard = ({
                       whileTap={{ scale: 0.97 }}
                       onClick={() => {
                         if (isTrueFalse) {
+                          setSelectedIndices([idx]);
+                          return;
+                        }
+                        if (!isMultiSelect) {
                           setSelectedIndices([idx]);
                           return;
                         }
