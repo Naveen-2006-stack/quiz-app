@@ -651,7 +651,94 @@ export default function HostRoom() {
         p_violation_type: violationType,
       });
     });
+    });
   }, [participantsList, sessionStatus, sessionId, incrementCheatFlag]);
+
+  const renderModals = () => (
+    <>
+      {/* Confirm Kick Modal */}
+      <AnimatePresence>
+        {confirmKickParticipant && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl shadow-2xl overflow-hidden p-6 text-center"
+            >
+              <div className="mx-auto w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                <XCircle size={32} />
+              </div>
+              <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-2">Ban Student?</h3>
+              <p className="text-slate-500 dark:text-slate-400 mb-6 font-medium">
+                Are you sure you want to ban <strong className="text-slate-800 dark:text-slate-200">{confirmKickParticipant.name}</strong>? They will not be able to rejoin.
+              </p>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setConfirmKickParticipant(null)}
+                  className="flex-1 px-4 py-3 rounded-xl bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => kickParticipant(confirmKickParticipant.id, confirmKickParticipant.name)}
+                  className="flex-1 px-4 py-3 rounded-xl bg-rose-500 text-white font-bold hover:bg-rose-600 transition-colors shadow-lg shadow-rose-500/30"
+                >
+                  Yes, Ban
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Confirm Terminate Modal */}
+      <AnimatePresence>
+        {confirmTerminate && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl shadow-2xl overflow-hidden p-6 text-center"
+            >
+              <div className="mx-auto w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                <Trash2 size={32} />
+              </div>
+              <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-2">Terminate Quiz?</h3>
+              <p className="text-slate-500 dark:text-slate-400 mb-6 font-medium">
+                This will instantly end the session for all participants and redirect them to the dashboard.
+              </p>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setConfirmTerminate(false)}
+                  className="flex-1 px-4 py-3 rounded-xl bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={terminateQuiz}
+                  className="flex-1 px-4 py-3 rounded-xl bg-rose-500 text-white font-bold hover:bg-rose-600 transition-colors shadow-lg shadow-rose-500/30"
+                >
+                  Terminate
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
 
   // ───────── ACTIVE / FINISHED screen ─────────
   if (sessionStatus === "active" || sessionStatus === "finished") {
@@ -981,87 +1068,7 @@ export default function HostRoom() {
             </motion.div>
           )}
         </AnimatePresence>
-        {/* Confirm Kick Modal */}
-        <AnimatePresence>
-          {confirmKickParticipant && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-            >
-              <motion.div
-                initial={{ scale: 0.9, y: 20 }}
-                animate={{ scale: 1, y: 0 }}
-                exit={{ scale: 0.9, y: 20 }}
-                className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl shadow-2xl overflow-hidden p-6 text-center"
-              >
-                <div className="mx-auto w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mb-4">
-                  <XCircle size={32} />
-                </div>
-                <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-2">Ban Student?</h3>
-                <p className="text-slate-500 dark:text-slate-400 mb-6 font-medium">
-                  Are you sure you want to ban <strong className="text-slate-800 dark:text-slate-200">{confirmKickParticipant.name}</strong>? They will not be able to rejoin.
-                </p>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setConfirmKickParticipant(null)}
-                    className="flex-1 px-4 py-3 rounded-xl bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => kickParticipant(confirmKickParticipant.id, confirmKickParticipant.name)}
-                    className="flex-1 px-4 py-3 rounded-xl bg-rose-500 text-white font-bold hover:bg-rose-600 transition-colors shadow-lg shadow-rose-500/30"
-                  >
-                    Yes, Ban
-                  </button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Confirm Terminate Modal */}
-        <AnimatePresence>
-          {confirmTerminate && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-            >
-              <motion.div
-                initial={{ scale: 0.9, y: 20 }}
-                animate={{ scale: 1, y: 0 }}
-                exit={{ scale: 0.9, y: 20 }}
-                className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl shadow-2xl overflow-hidden p-6 text-center"
-              >
-                <div className="mx-auto w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mb-4">
-                  <Trash2 size={32} />
-                </div>
-                <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-2">Terminate Quiz?</h3>
-                <p className="text-slate-500 dark:text-slate-400 mb-6 font-medium">
-                  This will instantly end the session for all participants and redirect them to the dashboard.
-                </p>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setConfirmTerminate(false)}
-                    className="flex-1 px-4 py-3 rounded-xl bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={terminateQuiz}
-                    className="flex-1 px-4 py-3 rounded-xl bg-rose-500 text-white font-bold hover:bg-rose-600 transition-colors shadow-lg shadow-rose-500/30"
-                  >
-                    Terminate
-                  </button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {renderModals()}
       </div>
     );
   }
@@ -1200,7 +1207,7 @@ export default function HostRoom() {
                     {p.display_name}
                   </div>
                   <button
-                    onClick={() => kickParticipant(p.id, p.display_name)}
+                    onClick={() => setConfirmKickParticipant({ id: p.id, name: p.display_name })}
                     className="absolute -top-2 -right-2 p-1 bg-rose-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity transform hover:scale-110 shadow-lg"
                     title="Remove Player"
                   >
@@ -1212,6 +1219,8 @@ export default function HostRoom() {
           )}
         </AnimatePresence>
       </div>
+
+      {renderModals()}
     </div>
     </div>
   );
