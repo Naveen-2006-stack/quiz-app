@@ -298,7 +298,6 @@ export default function StudentPlayRoom() {
     };
 
     const onPageLeave = () => {
-      void markParticipantLeft("Left session during active quiz", true);
       void triggerStrike("Page Refresh / Leave", true);
     };
 
