@@ -213,7 +213,7 @@ export default function UnifiedDashboard() {
       .eq("teacher_id", userId);
 
     const ownedQuizIds = (ownedQuizzes || []).map((quiz: any) => quiz.id);
-    const reportStatuses = ["waiting", "active", "finished", "completed"];
+    const reportStatuses = ["waiting", "active", "finished"];
     const sessionSelect = `
       id,
       status,

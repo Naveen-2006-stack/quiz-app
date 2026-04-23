@@ -30,7 +30,7 @@ export default function ReportsDashboard() {
 
     const ownedQuizIds = (ownedQuizzes || []).map((quiz: any) => quiz.id);
 
-    const reportStatuses = ["waiting", "active", "finished", "completed"];
+    const reportStatuses = ["waiting", "active", "finished"];
     const sessionSelect = `
       id,
       status,
