@@ -437,9 +437,9 @@ export default function QuizEditor() {
                         onChange={e => setQuestionType(qIdx, e.target.value as QuestionType)}
                         className="bg-transparent text-slate-900 dark:text-white font-semibold outline-none cursor-pointer"
                       >
-                        <option value="mcq">Normal</option>
-                        <option value="multi_select">Multiple Choice</option>
-                        <option value="true_false">True / False</option>
+                        <option value="mcq" className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">Normal</option>
+                        <option value="multi_select" className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">Multiple Choice</option>
+                        <option value="true_false" className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">True / False</option>
                       </select>
                     </div>
                     <div className="flex items-center gap-2 bg-gray-50 dark:bg-slate-900 px-4 py-2 rounded-xl border border-gray-200 dark:border-white/10">
@@ -448,7 +448,7 @@ export default function QuizEditor() {
                         value={q.time_limit} onChange={e => updateQuestion(qIdx, "time_limit", parseInt(e.target.value))}
                         className="bg-transparent text-slate-900 dark:text-white font-semibold outline-none cursor-pointer"
                       >
-                        {[10, 20, 30, 40, 60, 90].map(t => <option key={t} value={t}>{t}s</option>)}
+                        {[10, 20, 30, 40, 60, 90].map(t => <option key={t} value={t} className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">{t}s</option>)}
                       </select>
                     </div>
                     <div className="flex items-center gap-2 bg-gray-50 dark:bg-slate-900 px-4 py-2 rounded-xl border border-gray-200 dark:border-white/10">
@@ -457,7 +457,7 @@ export default function QuizEditor() {
                         value={q.base_points} onChange={e => updateQuestion(qIdx, "base_points", parseInt(e.target.value))}
                         className="bg-transparent text-slate-900 dark:text-white font-semibold outline-none cursor-pointer"
                       >
-                        {[50, 100, 200].map(p => <option key={p} value={p}>{p}</option>)}
+                        {[50, 100, 200].map(p => <option key={p} value={p} className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">{p}</option>)}
                       </select>
                     </div>
                   </div>
