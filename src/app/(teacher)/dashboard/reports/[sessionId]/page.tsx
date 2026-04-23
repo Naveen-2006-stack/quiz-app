@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
-import { motion } from "framer-motion";
-import { ArrowLeft, Download, Target, Users, Trophy, Percent, ShieldAlert } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ArrowLeft, Download, Target, Users, Trophy, Percent, ShieldAlert, XCircle } from "lucide-react";
 import Link from "next/link";
 
 type SessionInfo = {
@@ -115,6 +115,7 @@ export default function SessionAnalyticsReportPage() {
   const [responses, setResponses] = useState<StudentResponse[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [violationLogsByParticipant, setViolationLogsByParticipant] = useState<Record<string, ViolationLog[]>>({});
+  const [selectedViolations, setSelectedViolations] = useState<{name: string, logs: ViolationLog[]} | null>(null);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -485,15 +486,19 @@ export default function SessionAnalyticsReportPage() {
                     </td>
                     <td className="px-3 py-3">
                       {row.violationLogs.length > 0 ? (
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${
-                          row.violationLogs.length >= 3
-                            ? "bg-rose-100 text-rose-700"
-                            : row.violationLogs.length >= 2
-                            ? "bg-orange-100 text-orange-700"
-                            : "bg-amber-100 text-amber-700"
-                        }`}>
+                        <button
+                          onClick={() => setSelectedViolations({ name: row.name, logs: row.violationLogs })}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold transition-transform hover:scale-105 active:scale-95 ${
+                            row.violationLogs.length >= 3
+                              ? "bg-rose-100 text-rose-700 hover:bg-rose-200"
+                              : row.violationLogs.length >= 2
+                              ? "bg-orange-100 text-orange-700 hover:bg-orange-200"
+                              : "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                          }`}
+                          title="Click to view violation details"
+                        >
                           <ShieldAlert size={12} /> {row.violationLogs.length}
-                        </span>
+                        </button>
                       ) : (
                         <span className="text-slate-400 text-xs">-</span>
                       )}
@@ -601,6 +606,63 @@ export default function SessionAnalyticsReportPage() {
           </div>
         </motion.section>
       </motion.div>
+
+      {/* Violations Detail Modal */}
+      <AnimatePresence>
+        {selectedViolations && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-rose-100 overflow-hidden"
+            >
+              <div className="bg-rose-50 px-6 py-4 border-b border-rose-100 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <ShieldAlert className="text-rose-600" size={24} />
+                  <h3 className="font-extrabold text-xl text-rose-900">
+                    Violations History
+                  </h3>
+                </div>
+                <button 
+                  onClick={() => setSelectedViolations(null)} 
+                  className="p-2 text-rose-400 hover:text-rose-600 bg-rose-100/50 hover:bg-rose-200/50 rounded-full transition-colors"
+                >
+                  <XCircle size={20} />
+                </button>
+              </div>
+              
+              <div className="p-6">
+                <p className="font-medium text-slate-700 mb-6">
+                  Showing recorded strikes for <strong className="text-slate-900">{selectedViolations.name}</strong>
+                </p>
+
+                <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+                  {selectedViolations.logs.map((v, i) => (
+                    <div key={`${v.timestamp}-${i}`} className="flex items-start gap-4 p-4 rounded-xl border border-rose-100 bg-white shadow-sm relative overflow-hidden">
+                      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-rose-500" />
+                      <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 font-black shrink-0">
+                        {selectedViolations.logs.length - i}
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-bold text-slate-800">{v.type}</h4>
+                        <p className="text-xs font-semibold text-slate-400 mt-1 uppercase tracking-wider">
+                          {new Date(v.timestamp).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

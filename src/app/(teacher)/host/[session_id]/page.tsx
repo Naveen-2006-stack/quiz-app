@@ -715,6 +715,12 @@ export default function HostRoom() {
                 {typeMeta.label}
               </span>
 
+              {/* Game PIN Display */}
+              <div className="flex items-center gap-2 px-4 py-2 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 font-bold rounded-xl text-sm border border-indigo-200 dark:border-indigo-500/30">
+                <span className="text-indigo-500/70 dark:text-indigo-500/50">PIN:</span>
+                <span className="tracking-[0.1em]">{sessionInfo?.join_code}</span>
+              </div>
+
               <div className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30">
                 <CheckSquare size={18} className="text-emerald-600 dark:text-emerald-400" />
                 <span className="font-black text-emerald-700 dark:text-emerald-400 text-lg tabular-nums">
@@ -1142,15 +1148,23 @@ export default function HostRoom() {
           <span className="text-2xl font-bold text-slate-900">{participantsList.length}</span>
           <span className="text-slate-500 font-medium">Players Connected</span>
         </div>
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={startGame}
-          disabled={participantsList.length === 0 || startingGame}
-          className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white px-8 py-4 rounded-2xl font-bold text-xl shadow-xl shadow-emerald-500/30 transition-all"
-        >
-          <Play size={24} /> {startingGame ? "Starting…" : "Start Game"}
-        </motion.button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setConfirmTerminate(true)}
+            className="flex items-center gap-2 px-6 py-4 rounded-2xl bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors font-bold text-lg border border-rose-200"
+          >
+            <Trash2 size={24} /> End Game
+          </button>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={startGame}
+            disabled={participantsList.length === 0 || startingGame}
+            className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white px-8 py-4 rounded-2xl font-bold text-xl shadow-xl shadow-emerald-500/30 transition-all"
+          >
+            <Play size={24} /> {startingGame ? "Starting…" : "Start Game"}
+          </motion.button>
+        </div>
       </div>
 
       {startError && (

@@ -59,6 +59,8 @@ export default function StudentPlayRoom() {
   const [isGhostMode, setIsGhostMode] = useState(false);
   // Test Mode: when true, marks and leaderboard are hidden from students
   const [isTestMode, setIsTestMode] = useState(false);
+  // Banned state
+  const [isBanned, setIsBanned] = useState(false);
   // Notes & Multi-submission
   const [answeredQuestions, setAnsweredQuestions] = useState<Set<string>>(new Set());
   const [lastAnswerCorrect, setLastAnswerCorrect] = useState<boolean | null>(null);
@@ -491,7 +493,7 @@ export default function StudentPlayRoom() {
         if (targetId && targetId === participantId) {
           clearPersistedLiveQuizSession();
           supabase.removeAllChannels();
-          router.push("/dashboard?error=kicked");
+          setIsBanned(true);
         }
       })
       .on("broadcast", { event: "terminate_session" }, () => {
@@ -819,6 +821,32 @@ export default function StudentPlayRoom() {
     });
     setTimeout(() => setReactionCooldown(false), 500);
   };
+
+  if (isBanned) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="max-w-md w-full bg-white rounded-3xl p-8 text-center shadow-2xl border border-rose-100"
+        >
+          <div className="w-20 h-20 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-6">
+            <X size={40} />
+          </div>
+          <h2 className="text-3xl font-black text-slate-900 mb-4">You have been banned</h2>
+          <p className="text-slate-500 font-medium mb-8">
+            The host has removed you from this session. You cannot rejoin this game.
+          </p>
+          <button
+            onClick={() => router.push("/dashboard")}
+            className="w-full bg-slate-900 text-white font-bold py-4 rounded-xl hover:bg-slate-800 transition-colors"
+          >
+            Back to Dashboard
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
