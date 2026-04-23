@@ -206,35 +206,46 @@ export default function QuizEditor() {
   const saveQuiz = async () => {
     setSaving(true);
     setSaveStatus(null);
+
+    // 1. Validate all questions before attempting to save
+    const validationErrors: string[] = [];
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      const trimmedQuestionText = q.question_text.trim();
+      if (!trimmedQuestionText) {
+        validationErrors.push(`Question ${i + 1}: question text cannot be empty.`);
+      }
+
+      const hasEmptyOptionText = q.options.some((opt) => !opt.text.trim());
+      if (hasEmptyOptionText) {
+        validationErrors.push(`Question ${i + 1}: options cannot be empty.`);
+      }
+
+      const hasCorrectAnswer = q.options.some((opt) => !!opt.is_correct);
+      if (!hasCorrectAnswer) {
+        validationErrors.push(`Question ${i + 1}: mark at least one correct answer.`);
+      }
+    }
+
+    if (validationErrors.length > 0) {
+      setSaveStatus({ type: 'error', message: validationErrors.join(' | ') });
+      setSaving(false);
+      return;
+    }
+
     const errors: string[] = [];
     try {
-      // 1. Update Quiz Title/Desc
+      // 2. Update Quiz Title/Desc
       const { error: quizError } = await supabase
         .from('quizzes')
         .update({ title: quiz.title, description: quiz.description, timer_based_marking: quiz.timer_based_marking, test_mode: quiz.test_mode ?? false })
         .eq('id', quiz.id);
       if (quizError) errors.push(`Quiz details: ${quizError.message}`);
 
-      // 2. Upsert Questions one by one
+      // 3. Upsert Questions one by one
       for (let i = 0; i < questions.length; i++) {
         const q = questions[i];
         const trimmedQuestionText = q.question_text.trim();
-        if (!trimmedQuestionText) {
-          errors.push(`Question ${i + 1}: question text cannot be empty.`);
-          continue;
-        }
-
-        const hasEmptyOptionText = q.options.some((opt) => !opt.text.trim());
-        if (hasEmptyOptionText) {
-          errors.push(`Question ${i + 1}: questions and options cannot be empty.`);
-          continue;
-        }
-
-        const hasCorrectAnswer = q.options.some((opt) => !!opt.is_correct);
-        if (!hasCorrectAnswer) {
-          errors.push(`Question ${i + 1}: mark at least one correct answer.`);
-          continue;
-        }
 
         const payload = {
           quiz_id: quizId,

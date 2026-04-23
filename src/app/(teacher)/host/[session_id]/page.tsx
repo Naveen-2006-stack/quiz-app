@@ -467,8 +467,12 @@ export default function HostRoom() {
     }
   };
 
-  const kickParticipant = async (pId: string) => {
+  const kickParticipant = async (pId: string, pName: string) => {
     if (!sessionId || !controlChannelRef.current) return;
+
+    if (!window.confirm(`Are you sure you want to ban ${pName}? They will not be able to rejoin this session.`)) {
+      return;
+    }
 
     try {
       // 1. Secure Ban in Database
@@ -849,7 +853,7 @@ export default function HostRoom() {
                 </div>
                 {sessionStatus === "active" && (
                   <button
-                    onClick={() => kickParticipant(p.id)}
+                    onClick={() => kickParticipant(p.id, p.display_name)}
                     className="ml-2 p-2.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-all opacity-0 group-hover:opacity-100"
                     title="Ban Student"
                   >
@@ -930,7 +934,7 @@ export default function HostRoom() {
 
                   <div className="mt-8 flex justify-end">
                     <button
-                      onClick={() => kickParticipant(selectedViolationsParticipant.id)}
+                      onClick={() => kickParticipant(selectedViolationsParticipant.id, selectedViolationsParticipant.name)}
                       className="flex items-center gap-2 px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-lg shadow-rose-600/30 transition-all"
                     >
                       <Trash2 size={18} /> Ban Player Now
@@ -1071,7 +1075,7 @@ export default function HostRoom() {
                     {p.display_name}
                   </div>
                   <button
-                    onClick={() => kickParticipant(p.id)}
+                    onClick={() => kickParticipant(p.id, p.display_name)}
                     className="absolute -top-2 -right-2 p-1 bg-rose-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity transform hover:scale-110 shadow-lg"
                     title="Remove Player"
                   >
