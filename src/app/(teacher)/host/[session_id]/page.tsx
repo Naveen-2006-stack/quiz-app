@@ -651,7 +651,6 @@ export default function HostRoom() {
         p_violation_type: violationType,
       });
     });
-    });
   }, [participantsList, sessionStatus, sessionId, incrementCheatFlag]);
 
   const renderModals = () => (
