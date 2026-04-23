@@ -74,6 +74,10 @@ export default function HostRoom() {
   // Live submission counter state
   const [submissionCount, setSubmissionCount] = useState(0);
 
+  // Custom Modal States
+  const [confirmKickParticipant, setConfirmKickParticipant] = useState<{ id: string, name: string } | null>(null);
+  const [confirmTerminate, setConfirmTerminate] = useState(false);
+
   const controlChannelRef = useRef<any>(null);
   const latestSessionStatusRef = useRef<string>("waiting");
   const hasAutoCompletedRef = useRef(false);
@@ -467,12 +471,29 @@ export default function HostRoom() {
     }
   };
 
+  const terminateQuiz = async () => {
+    if (!sessionId || !controlChannelRef.current) return;
+    try {
+      await supabase
+        .from("live_sessions")
+        .update({ status: "finished", finished_at: new Date().toISOString() })
+        .eq("id", sessionId);
+
+      await controlChannelRef.current.send({
+        type: "broadcast",
+        event: "terminate_session",
+      });
+
+      setSessionStatus("finished");
+      setConfirmTerminate(false);
+      router.replace(`/teacher-dashboard/reports`);
+    } catch (err: any) {
+      console.error("Failed to terminate quiz:", err.message);
+    }
+  };
+
   const kickParticipant = async (pId: string, pName: string) => {
     if (!sessionId || !controlChannelRef.current) return;
-
-    if (!window.confirm(`Are you sure you want to ban ${pName}? They will not be able to rejoin this session.`)) {
-      return;
-    }
 
     try {
       // 1. Secure Ban in Database
@@ -494,8 +515,9 @@ export default function HostRoom() {
       // (useLiveSession will also handle the DB UPDATE event, but this is instant)
       removeParticipant(pId);
 
-      // 4. Close violations modal if open
+      // 4. Close modals if open
       setSelectedViolationsParticipant(null);
+      setConfirmKickParticipant(null);
     } catch (err: any) {
       console.error("Failed to kick participant:", err.message);
     }
@@ -693,7 +715,6 @@ export default function HostRoom() {
                 {typeMeta.label}
               </span>
 
-              {/* ── Feature 3: Submission Counter Badge ── */}
               <div className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30">
                 <CheckSquare size={18} className="text-emerald-600 dark:text-emerald-400" />
                 <span className="font-black text-emerald-700 dark:text-emerald-400 text-lg tabular-nums">
@@ -702,6 +723,15 @@ export default function HostRoom() {
                 </span>
                 <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-500">submitted</span>
               </div>
+
+              {sessionStatus === "active" && (
+                <button
+                  onClick={() => setConfirmTerminate(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-rose-50 text-rose-600 hover:bg-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/20 border border-rose-200 dark:border-rose-500/30 transition-colors font-bold text-sm"
+                >
+                  <Trash2 size={16} /> Terminate Quiz
+                </button>
+              )}
 
               <span className="text-slate-500 font-medium font-mono">{activeQ.time_limit}s</span>
             </div>
@@ -853,7 +883,7 @@ export default function HostRoom() {
                 </div>
                 {sessionStatus === "active" && (
                   <button
-                    onClick={() => kickParticipant(p.id, p.display_name)}
+                    onClick={() => setConfirmKickParticipant({ id: p.id, name: p.display_name })}
                     className="ml-2 p-2.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-all opacity-0 group-hover:opacity-100"
                     title="Ban Student"
                   >
@@ -940,6 +970,87 @@ export default function HostRoom() {
                       <Trash2 size={18} /> Ban Player Now
                     </button>
                   </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        {/* Confirm Kick Modal */}
+        <AnimatePresence>
+          {confirmKickParticipant && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            >
+              <motion.div
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.9, y: 20 }}
+                className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl shadow-2xl overflow-hidden p-6 text-center"
+              >
+                <div className="mx-auto w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                  <XCircle size={32} />
+                </div>
+                <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-2">Ban Student?</h3>
+                <p className="text-slate-500 dark:text-slate-400 mb-6 font-medium">
+                  Are you sure you want to ban <strong className="text-slate-800 dark:text-slate-200">{confirmKickParticipant.name}</strong>? They will not be able to rejoin.
+                </p>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setConfirmKickParticipant(null)}
+                    className="flex-1 px-4 py-3 rounded-xl bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => kickParticipant(confirmKickParticipant.id, confirmKickParticipant.name)}
+                    className="flex-1 px-4 py-3 rounded-xl bg-rose-500 text-white font-bold hover:bg-rose-600 transition-colors shadow-lg shadow-rose-500/30"
+                  >
+                    Yes, Ban
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Confirm Terminate Modal */}
+        <AnimatePresence>
+          {confirmTerminate && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            >
+              <motion.div
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.9, y: 20 }}
+                className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl shadow-2xl overflow-hidden p-6 text-center"
+              >
+                <div className="mx-auto w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                  <Trash2 size={32} />
+                </div>
+                <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-2">Terminate Quiz?</h3>
+                <p className="text-slate-500 dark:text-slate-400 mb-6 font-medium">
+                  This will instantly end the session for all participants and redirect them to the dashboard.
+                </p>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setConfirmTerminate(false)}
+                    className="flex-1 px-4 py-3 rounded-xl bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={terminateQuiz}
+                    className="flex-1 px-4 py-3 rounded-xl bg-rose-500 text-white font-bold hover:bg-rose-600 transition-colors shadow-lg shadow-rose-500/30"
+                  >
+                    Terminate
+                  </button>
                 </div>
               </motion.div>
             </motion.div>

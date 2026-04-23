@@ -439,15 +439,6 @@ export default function StudentPlayRoom() {
           setFloatingEmojis((prev) => prev.filter((item) => item.id !== id));
         }, 2000);
       })
-      .on("broadcast", { event: "kick_player" }, (payload: any) => {
-        const targetId = payload?.payload?.targetId as string | undefined;
-        if (targetId && targetId === participantId) {
-          // You've been banished by the Host!
-          clearPersistedLiveQuizSession();
-          supabase.removeAllChannels();
-          router.push("/dashboard?error=kicked");
-        }
-      })
       .subscribe();
     reactionChannelRef.current = gameEmojiChannel;
 
@@ -486,18 +477,31 @@ export default function StudentPlayRoom() {
     };
   }, [sessionId]);
 
-  // Listen for answer-reveal broadcasts from host
+  // Listen for answer-reveal, kicks, and termination broadcasts from host
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || !participantId) return;
     const controlChannel = supabase
       .channel(`session_control:${sessionId}`)
       .on("broadcast", { event: "reveal_answer" }, (payload: any) => {
         const idx = payload?.payload?.questionIndex;
         if (typeof idx === "number") setRevealedQuestionIndex(idx);
       })
+      .on("broadcast", { event: "kick_player" }, (payload: any) => {
+        const targetId = payload?.payload?.targetId as string | undefined;
+        if (targetId && targetId === participantId) {
+          clearPersistedLiveQuizSession();
+          supabase.removeAllChannels();
+          router.push("/dashboard?error=kicked");
+        }
+      })
+      .on("broadcast", { event: "terminate_session" }, () => {
+        clearPersistedLiveQuizSession();
+        supabase.removeAllChannels();
+        router.push("/dashboard?error=terminated");
+      })
       .subscribe();
     return () => { void supabase.removeChannel(controlChannel); };
-  }, [sessionId]);
+  }, [sessionId, participantId, router]);
 
   // Reset reveal state and last answer when question advances
   useEffect(() => {

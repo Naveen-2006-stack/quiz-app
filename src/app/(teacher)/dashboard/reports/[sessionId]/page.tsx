@@ -27,6 +27,7 @@ type Participant = {
   notes?: string;
   cheat_flags?: number;
   violation_logs?: ViolationLog[];
+  is_banned?: boolean;
 };
 
 type StudentResponse = {
@@ -51,6 +52,7 @@ type LeaderboardRow = {
   totalQuestions: number;
   notes?: string;
   violationLogs: ViolationLog[];
+  isBanned: boolean;
 };
 
 type QuestionStat = {
@@ -178,9 +180,8 @@ export default function SessionAnalyticsReportPage() {
       const [pRes, rRes, qRes, vRes] = await Promise.all([
         supabase
           .from("participants")
-          .select("id, display_name, score, notes, cheat_flags, violation_logs")
-          .eq("session_id", sessionId)
-          .eq("is_banned", false),
+          .select("id, display_name, score, notes, cheat_flags, violation_logs, is_banned")
+          .eq("session_id", sessionId),
         supabase
           .from("student_responses")
           .select("question_id, participant_id, is_correct")
@@ -267,6 +268,7 @@ export default function SessionAnalyticsReportPage() {
       totalQuestions: questions.length,
       notes: p.notes || "",
       violationLogs: violationLogsByParticipant[p.id] || [],
+      isBanned: p.is_banned || false,
     }));
   }, [participants, responses, questions.length, violationLogsByParticipant]);
 
@@ -469,7 +471,14 @@ export default function SessionAnalyticsReportPage() {
                 {leaderboard.map((row) => (
                   <tr key={`${row.rank}-${row.name}`} className="border-b border-slate-100 last:border-b-0">
                     <td className={`px-3 py-3 font-black ${rankClass(row.rank)}`}>#{row.rank}</td>
-                    <td className="px-3 py-3 text-slate-800">{row.name}</td>
+                    <td className="px-3 py-3 text-slate-800">
+                      {row.name}
+                      {row.isBanned && (
+                        <span className="ml-2 inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-700">
+                          Banned
+                        </span>
+                      )}
+                    </td>
                     <td className="px-3 py-3 font-semibold text-slate-800">{row.score.toLocaleString()}</td>
                     <td className="px-3 py-3 text-slate-500">
                       {row.correctCount} / {row.totalQuestions}

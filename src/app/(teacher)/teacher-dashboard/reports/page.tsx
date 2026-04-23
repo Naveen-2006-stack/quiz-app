@@ -103,7 +103,6 @@ export default function ReportsDashboard() {
 
     const participantsBySession = new Map<string, any[]>();
     (participantsData || []).forEach((participant: any) => {
-      if (participant.is_banned) return;
       const existing = participantsBySession.get(participant.session_id) || [];
       existing.push(participant);
       participantsBySession.set(participant.session_id, existing);
