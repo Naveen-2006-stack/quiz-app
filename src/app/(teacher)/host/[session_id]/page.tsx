@@ -26,6 +26,7 @@ interface FlaggedStudent {
 
 interface ViolationEntry {
   id: string | number;         // DB UUID or Date.now() for live events
+  participant_id: string;
   violation_type: string;
   created_at: string;
   source: "live" | "db";       // track origin for deduplication display
@@ -68,6 +69,7 @@ export default function HostRoom() {
   const [selectedViolationsParticipant, setSelectedViolationsParticipant] = useState<{ id: string, name: string } | null>(null);
   const [violationsHistory, setViolationsHistory] = useState<ViolationEntry[]>([]);
   const [loadingViolations, setLoadingViolations] = useState(false);
+  const [violationLogsByParticipant, setViolationLogsByParticipant] = useState<Record<string, ViolationEntry[]>>({});
 
   // Live submission counter state
   const [submissionCount, setSubmissionCount] = useState(0);
@@ -156,7 +158,9 @@ export default function HostRoom() {
       .on("broadcast", { event: "anti_cheat_violation" }, (payload: any) => {
         const studentId = payload?.payload?.studentId as string | undefined;
         const studentName = payload?.payload?.studentName as string | undefined;
-        const violationType = payload?.payload?.violationType as string | undefined;
+        const structured = payload?.payload?.violation as { type?: string; timestamp?: string } | undefined;
+        const violationType = structured?.type || (payload?.payload?.violationType as string | undefined);
+        const violationTimestamp = structured?.timestamp || new Date().toISOString();
         if (!studentId || !violationType) return;
 
         // 1. Increment cheat badge in Zustand (for the leaderboard counter)
@@ -167,14 +171,27 @@ export default function HostRoom() {
         setLiveViolations(prev => [
           {
             id: Date.now() + Math.random(),   // unique key for React
+            participant_id: studentId,
             violation_type: violationType,
-            created_at: new Date().toISOString(),
+            created_at: violationTimestamp,
             source: "live" as const,
-            studentId,
-            studentName,
           },
           ...prev,
         ]);
+
+        setViolationLogsByParticipant((prev) => {
+          const next: ViolationEntry = {
+            id: Date.now() + Math.random(),
+            participant_id: studentId,
+            violation_type: violationType,
+            created_at: violationTimestamp,
+            source: "live",
+          };
+          return {
+            ...prev,
+            [studentId]: [next, ...(prev[studentId] || [])],
+          };
+        });
       })
       .subscribe();
     return () => { void supabase.removeChannel(gameRoomChannel); };
@@ -323,6 +340,29 @@ export default function HostRoom() {
     if (pData) {
       const activeParticipants = pData.filter(p => !p.is_banned);
       setParticipants(activeParticipants);
+    }
+
+    const { data: vData } = await supabase
+      .from("participant_violations")
+      .select("id, participant_id, violation_type, created_at")
+      .eq("session_id", sessionId)
+      .order("created_at", { ascending: false });
+
+    if (vData) {
+      const map: Record<string, ViolationEntry[]> = {};
+      (vData as any[]).forEach((row) => {
+        const pid = row.participant_id as string | undefined;
+        if (!pid) return;
+        if (!map[pid]) map[pid] = [];
+        map[pid].push({
+          id: row.id,
+          participant_id: pid,
+          violation_type: row.violation_type,
+          created_at: row.created_at,
+          source: "db",
+        });
+      });
+      setViolationLogsByParticipant(map);
     }
   };
 
@@ -480,7 +520,7 @@ export default function HostRoom() {
 
       // 2. Pull live events for this specific student from in-memory feed
       const liveForStudent = liveViolations
-        .filter((v: any) => v.studentId === pId)
+        .filter((v: any) => v.participant_id === pId)
         .map((v) => ({ ...v, source: "live" as const }));
 
       // 3. Merge: live events on top, DB records below.
@@ -500,6 +540,7 @@ export default function HostRoom() {
         ...(dbData || []).map((d: any) => ({ ...d, source: "db" as const })),
       ];
       setViolationsHistory(merged);
+      setViolationLogsByParticipant((prev) => ({ ...prev, [pId]: merged }));
     } catch (err) {
       console.error("Failed to load violations:", err);
     } finally {
@@ -556,14 +597,27 @@ export default function HostRoom() {
       setLiveViolations((prev: any) => [
         {
           id: Date.now() + Math.random(),
+          participant_id: p.id,
           violation_type: violationType,
           created_at: new Date().toISOString(),
           source: "live" as const,
-          studentId: p.id,
-          studentName: p.display_name,
         },
         ...prev,
       ]);
+
+      setViolationLogsByParticipant((prev) => ({
+        ...prev,
+        [p.id]: [
+          {
+            id: Date.now() + Math.random(),
+            participant_id: p.id,
+            violation_type: violationType,
+            created_at: new Date().toISOString(),
+            source: "live",
+          },
+          ...(prev[p.id] || []),
+        ],
+      }));
 
       void supabase.rpc("log_violation", {
         p_session_id: sessionId,
@@ -672,6 +726,17 @@ export default function HostRoom() {
               </button>
             </div>
 
+            {activeQ.image_url && (
+              <div className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                <img
+                  src={activeQ.image_url}
+                  alt="Question visual"
+                  className="w-full max-h-96 object-contain"
+                  loading="lazy"
+                />
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {activeQ.options.map((opt: any, idx: number) => (
                 <div
@@ -742,6 +807,9 @@ export default function HostRoom() {
         <div className="grid grid-cols-1 gap-3 max-w-4xl mx-auto">
           <AnimatePresence>
             {sortedParticipants.map((p, idx) => (
+              (() => {
+                const violationCount = Math.max(violationLogsByParticipant[p.id]?.length || 0, p.cheat_flags || 0);
+                return (
               <motion.div
                 key={p.id}
                 layout
@@ -764,15 +832,15 @@ export default function HostRoom() {
                     onClick={() => handleOpenViolations(p.id, p.display_name || "Unknown")}
                     className={cn(
                       "flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black transition-colors",
-                      (p.cheat_flags || 0) > 0
-                        ? (p.cheat_flags >= 3 ? "bg-rose-600 text-white hover:bg-rose-700" : p.cheat_flags >= 2 ? "bg-orange-500 text-white hover:bg-orange-600" : "bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-500/20 dark:text-amber-400")
+                      violationCount > 0
+                        ? (violationCount >= 3 ? "bg-rose-600 text-white hover:bg-rose-700" : violationCount >= 2 ? "bg-orange-500 text-white hover:bg-orange-600" : "bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-500/20 dark:text-amber-400")
                         : "bg-slate-100 text-slate-400 dark:bg-slate-700/50 cursor-default"
                     )}
-                    title={(p.cheat_flags || 0) > 0 ? "Click to view violation history" : "No violations"}
-                    disabled={!(p.cheat_flags > 0)}
+                    title={violationCount > 0 ? "Click to view violation history" : "No violations"}
+                    disabled={violationCount === 0}
                   >
                     <ShieldAlert size={12} />
-                    {p.cheat_flags || 0}
+                    {violationCount}
                   </button>
                   <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wide">violations</span>
                 </div>
@@ -789,6 +857,8 @@ export default function HostRoom() {
                   </button>
                 )}
               </motion.div>
+                );
+              })()
             ))}
           </AnimatePresence>
         </div>

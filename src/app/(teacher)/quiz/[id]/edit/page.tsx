@@ -4,12 +4,12 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { useRouter, useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Save, Plus, Trash2, ArrowLeft, GripVertical, CheckCircle2 } from "lucide-react";
+import { Save, Plus, Trash2, ArrowLeft, GripVertical, CheckCircle2, ImagePlus, Loader2, X } from "lucide-react";
 import Link from "next/link";
 
 interface Option { text: string; is_correct: boolean; }
 type QuestionType = "mcq" | "true_false" | "multi_select";
-interface Question { id: string; question_text: string; question_type: QuestionType; time_limit: number; base_points: number; options: Option[]; order_index: number; _isNew?: boolean; }
+interface Question { id: string; question_text: string; question_type: QuestionType; time_limit: number; base_points: number; options: Option[]; image_url?: string | null; order_index: number; _isNew?: boolean; }
 interface Quiz { id: string; title: string; description: string; timer_based_marking?: boolean; test_mode?: boolean; }
 
 const getMcqDefaultOptions = (): Option[] => [
@@ -40,6 +40,7 @@ export default function QuizEditor() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [uploadingQuestionId, setUploadingQuestionId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchQuizData();
@@ -69,6 +70,7 @@ export default function QuizEditor() {
       question_type: "mcq",
       time_limit: 40,
       base_points: 100,
+      image_url: null,
       order_index: questions.length,
       options: getMcqDefaultOptions(),
       _isNew: true
@@ -154,6 +156,46 @@ export default function QuizEditor() {
     setQuestions(updated);
   };
 
+  const uploadQuestionImage = async (qIndex: number, file?: File | null) => {
+    const q = questions[qIndex];
+    if (!q || !file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setSaveStatus({ type: "error", message: `Question ${qIndex + 1}: please upload a valid image file.` });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setSaveStatus({ type: "error", message: `Question ${qIndex + 1}: image must be 5MB or less.` });
+      return;
+    }
+
+    setUploadingQuestionId(q.id);
+    try {
+      const extension = (file.name.split(".").pop() || "png").toLowerCase();
+      const path = `${quizId}/${q.id}-${Date.now()}.${extension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("quiz-images")
+        .upload(path, file, { upsert: true, contentType: file.type });
+
+      if (uploadError) {
+        setSaveStatus({ type: "error", message: `Question ${qIndex + 1}: failed to upload image.` });
+        return;
+      }
+
+      const { data: publicData } = supabase.storage
+        .from("quiz-images")
+        .getPublicUrl(path);
+
+      updateQuestion(qIndex, "image_url", publicData.publicUrl);
+      setSaveStatus({ type: "success", message: `Question ${qIndex + 1}: image uploaded.` });
+      setTimeout(() => setSaveStatus(null), 2500);
+    } finally {
+      setUploadingQuestionId(null);
+    }
+  };
+
   const deleteQuestion = async (index: number, rawId: string, isNew?: boolean) => {
     if (!isNew) {
       await supabase.from("questions").delete().eq("id", rawId);
@@ -176,6 +218,18 @@ export default function QuizEditor() {
       // 2. Upsert Questions one by one
       for (let i = 0; i < questions.length; i++) {
         const q = questions[i];
+        const trimmedQuestionText = q.question_text.trim();
+        if (!trimmedQuestionText) {
+          errors.push(`Question ${i + 1}: question text cannot be empty.`);
+          continue;
+        }
+
+        const hasEmptyOptionText = q.options.some((opt) => !opt.text.trim());
+        if (hasEmptyOptionText) {
+          errors.push(`Question ${i + 1}: questions and options cannot be empty.`);
+          continue;
+        }
+
         const hasCorrectAnswer = q.options.some((opt) => !!opt.is_correct);
         if (!hasCorrectAnswer) {
           errors.push(`Question ${i + 1}: mark at least one correct answer.`);
@@ -184,11 +238,12 @@ export default function QuizEditor() {
 
         const payload = {
           quiz_id: quizId,
-          question_text: q.question_text,
+          question_text: trimmedQuestionText,
           question_type: q.question_type || "mcq",
           time_limit: q.time_limit,
           base_points: q.base_points,
-          options: q.options,
+          image_url: q.image_url || null,
+          options: q.options.map((opt) => ({ ...opt, text: opt.text.trim() })),
           order_index: i,
         };
 
@@ -332,6 +387,45 @@ export default function QuizEditor() {
                     >
                       <Trash2 size={20} />
                     </button>
+                  </div>
+
+                  <div className="rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/40 p-4">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <label className="inline-flex items-center gap-2 cursor-pointer rounded-xl bg-white px-4 py-2 text-sm font-semibold text-indigo-700 border border-indigo-200 hover:bg-indigo-50 transition-colors">
+                        {uploadingQuestionId === q.id ? <Loader2 size={16} className="animate-spin" /> : <ImagePlus size={16} />}
+                        {uploadingQuestionId === q.id ? "Uploading..." : "Upload Question Image"}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          disabled={uploadingQuestionId === q.id}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            void uploadQuestionImage(qIdx, file);
+                            e.currentTarget.value = "";
+                          }}
+                        />
+                      </label>
+                      {q.image_url && (
+                        <button
+                          type="button"
+                          onClick={() => updateQuestion(qIdx, "image_url", null)}
+                          className="inline-flex items-center gap-1 rounded-xl bg-rose-100 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-200 transition-colors"
+                        >
+                          <X size={14} /> Remove
+                        </button>
+                      )}
+                    </div>
+                    {q.image_url && (
+                      <div className="mt-3 overflow-hidden rounded-xl border border-indigo-100 bg-white">
+                        <img
+                          src={q.image_url}
+                          alt={`Question ${qIdx + 1} preview`}
+                          className="w-full max-h-64 object-contain"
+                          loading="lazy"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* Settings Row: Time & Points */}

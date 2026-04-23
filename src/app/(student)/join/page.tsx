@@ -3,6 +3,7 @@
 import { Suspense, useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
+import { setPersistedLiveQuizSession } from "@/lib/liveQuizSession";
 import { motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
 
@@ -179,6 +180,13 @@ function StudentJoinContent() {
       setLoading(false);
       return;
     }
+
+    setPersistedLiveQuizSession({
+      participantId: participant.id,
+      sessionId: session.id,
+      gamePin: pin.trim().toUpperCase(),
+      nickname: name.trim(),
+    });
 
     // 3. Navigate to waiting/play room
     router.push(`/play/${session.id}`);

@@ -26,6 +26,7 @@ const OPTION_LABELS = ['A', 'B', 'C', 'D'];
 
 interface ActiveQuestionCardProps {
   question: string;
+  imageUrl?: string | null;
   questionType?: 'mcq' | 'true_false' | 'multi_select';
   options: { text: string; is_correct?: boolean }[];
   streak: number;
@@ -43,6 +44,7 @@ interface ActiveQuestionCardProps {
 
 export const ActiveQuestionCard = ({
   question,
+  imageUrl = null,
   questionType = 'mcq',
   options,
   streak,
@@ -189,6 +191,16 @@ export const ActiveQuestionCard = ({
         </div>
 
         {/* Question text */}
+        {imageUrl && (
+          <div className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+            <img
+              src={imageUrl}
+              alt="Question visual"
+              className="w-full max-h-80 object-contain"
+              loading="lazy"
+            />
+          </div>
+        )}
         <h2 className="text-2xl lg:text-3xl font-extrabold text-slate-900 dark:text-white mb-8 leading-tight tracking-tight">
           {question}
         </h2>

@@ -3,6 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
+import {
+  clearPersistedLiveQuizSession,
+  getPersistedLiveQuizSession,
+  setPersistedLiveQuizSession,
+} from "@/lib/liveQuizSession";
 import { useGameStore } from "@/store/useGameStore";
 import { ActiveQuestionCard } from "@/components/game/ActiveQuestionCard";
 import { motion, AnimatePresence } from "framer-motion";
@@ -68,6 +73,19 @@ export default function StudentPlayRoom() {
   // Universal emoji floats — same logic as Host screen
   const [floatingEmojis, setFloatingEmojis] = useState<FloatingEmoji[]>([]);
   const hasMarkedLeftRef = useRef(false);
+
+  // Restore critical in-memory participant state after refresh so quiz flow survives reloads.
+  useEffect(() => {
+    if (!sessionId || participantId) return;
+
+    const persisted = getPersistedLiveQuizSession(sessionId);
+    if (!persisted?.participantId) return;
+
+    setParticipantId(persisted.participantId);
+    if (persisted.nickname?.trim()) {
+      setParticipantName(persisted.nickname.trim());
+    }
+  }, [participantId, sessionId]);
 
   // Student realtime sync: follow host-driven session updates from live_sessions.
   useEffect(() => {
@@ -245,11 +263,21 @@ export default function StudentPlayRoom() {
         }
       }
 
+      const violationEvent = {
+        type,
+        timestamp: new Date().toISOString(),
+      };
+
       // Best-effort broadcast — host sees it in real-time
       void gameRoomChannel.send({
         type: "broadcast",
         event: "anti_cheat_violation",
-        payload: { studentName: participantName, studentId: participantId, violationType: type },
+        payload: {
+          studentName: participantName,
+          studentId: participantId,
+          violation: violationEvent,
+          violationType: type,
+        },
       });
       // Persist to DB via RPC (increments cheat_flags + inserts to participant_violations)
       void supabase.rpc("log_violation", {
@@ -291,14 +319,12 @@ export default function StudentPlayRoom() {
     // ── 4. CURSOR LEFT PAGE (mouseleave on document) ──
     // 500ms debounce suppresses rapid edge-jitter without masking genuine exits.
     // Cancels if the cursor re-enters the viewport within the debounce window.
-    const onMouseLeave = (e: MouseEvent) => {
-      if (e.clientY <= 0 || e.clientX <= 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight) {
-        if (mouseLeaveDebounceTimer !== null) return;
-        mouseLeaveDebounceTimer = setTimeout(() => {
-          mouseLeaveDebounceTimer = null;
-          void triggerStrike("Cursor Left Page");
-        }, 500);
-      }
+    const onMouseLeave = () => {
+      if (mouseLeaveDebounceTimer !== null) return;
+      mouseLeaveDebounceTimer = setTimeout(() => {
+        mouseLeaveDebounceTimer = null;
+        void triggerStrike("App Backgrounded / Tab Hidden", true);
+      }, 500);
     };
     const onMouseEnter = () => {
       if (mouseLeaveDebounceTimer !== null) { clearTimeout(mouseLeaveDebounceTimer); mouseLeaveDebounceTimer = null; }
@@ -417,6 +443,7 @@ export default function StudentPlayRoom() {
         const targetId = payload?.payload?.targetId as string | undefined;
         if (targetId && targetId === participantId) {
           // You've been banished by the Host!
+          clearPersistedLiveQuizSession();
           supabase.removeAllChannels();
           router.push("/dashboard?error=kicked");
         }
@@ -504,8 +531,13 @@ export default function StudentPlayRoom() {
   }, [sessionStatus, sessionId]);
 
   const initPlayRoom = async () => {
+    const persistedSession = getPersistedLiveQuizSession(sessionId);
+
     const uuid = localStorage.getItem("kahoot_device_uuid");
-    if (!uuid) { router.push("/join"); return; }
+    const fallbackParticipantId =
+      persistedSession?.sessionId === sessionId ? persistedSession?.participantId : undefined;
+
+    if (!uuid && !fallbackParticipantId) { router.push("/join"); return; }
 
     // Cache auth token for reliable page-close logging (keepalive fetch needs it)
     const { data: { session: authSession } } = await supabase.auth.getSession();
@@ -539,7 +571,7 @@ export default function StudentPlayRoom() {
         if (qError) console.warn("RPC not available, falling back to direct query:", qError.message);
         const { data: fallbackQData } = await supabase
           .from("questions")
-          .select("id, question_text, question_type, time_limit, options, order_index")
+          .select("id, question_text, question_type, time_limit, image_url, options, order_index")
           .eq("quiz_id", sData.quiz_id)
           .order("order_index", { ascending: true });
         if (fallbackQData) {
@@ -553,17 +585,39 @@ export default function StudentPlayRoom() {
       }
     }
 
-    const { data: pData } = await supabase
-      .from("participants")
-      .select("id, streak, display_name")
-      .eq("session_id", sessionId)
-      .eq("device_uuid", uuid)
-      .single();
+    let pData: any = null;
+
+    if (uuid) {
+      const { data } = await supabase
+        .from("participants")
+        .select("id, streak, display_name")
+        .eq("session_id", sessionId)
+        .eq("device_uuid", uuid)
+        .single();
+      pData = data;
+    }
+
+    if (!pData && fallbackParticipantId) {
+      const { data } = await supabase
+        .from("participants")
+        .select("id, streak, display_name")
+        .eq("session_id", sessionId)
+        .eq("id", fallbackParticipantId)
+        .single();
+      pData = data;
+    }
 
     if (pData) {
       setParticipantId(pData.id);
       setParticipantName(pData.display_name || "Student");
       setStreak(pData.streak || 0);
+
+      setPersistedLiveQuizSession({
+        participantId: pData.id,
+        sessionId,
+        gamePin: persistedSession?.gamePin || "",
+        nickname: pData.display_name || "Student",
+      });
 
       // Fetch answered questions and notes
       const [respData, notesData] = await Promise.all([
@@ -591,7 +645,7 @@ export default function StudentPlayRoom() {
         if (isGhost && sData?.quiz_id) {
           const { data: ghostQData } = await supabase
             .from("questions")
-            .select("id, question_text, question_type, time_limit, options, order_index")
+            .select("id, question_text, question_type, time_limit, image_url, options, order_index")
             .eq("quiz_id", sData.quiz_id)
             .order("order_index", { ascending: true });
           if (ghostQData) setQuestions(ghostQData);
@@ -606,6 +660,7 @@ export default function StudentPlayRoom() {
         console.error("Initialization checks failed:", err);
       }
     } else {
+      clearPersistedLiveQuizSession();
       router.push("/join");
       return;
     }
@@ -715,6 +770,7 @@ export default function StudentPlayRoom() {
           });
         }
 
+        clearPersistedLiveQuizSession();
         router.push("/dashboard?error=left-session");
         return;
       }
@@ -733,6 +789,7 @@ export default function StudentPlayRoom() {
 
       // 3. State/Storage Cleanup
       localStorage.removeItem("kahoot_device_uuid");
+      clearPersistedLiveQuizSession();
 
       // 4. Routing
       router.push("/dashboard");
@@ -863,6 +920,7 @@ export default function StudentPlayRoom() {
           <ActiveQuestionCard
             key={questions[currentQuestionIndex].id}
             question={questions[currentQuestionIndex].question_text}
+            imageUrl={questions[currentQuestionIndex].image_url || null}
             questionType={questions[currentQuestionIndex].question_type || "mcq"}
             options={questions[currentQuestionIndex].options}
             timeLimit={questions[currentQuestionIndex].time_limit}
