@@ -213,37 +213,61 @@ export default function UnifiedDashboard() {
       .eq("teacher_id", userId);
 
     const ownedQuizIds = (ownedQuizzes || []).map((quiz: any) => quiz.id);
+    const reportStatuses = ["waiting", "active", "finished", "completed"];
+    const sessionSelect = `
+      id,
+      status,
+      started_at,
+      finished_at,
+      join_code,
+      quiz_id,
+      quizzes(title)
+    `;
 
-    let sessionsQuery = supabase
+    const { data: teacherSessions, error: teacherSessionsError } = await supabase
       .from("live_sessions")
-      .select(`
-        id,
-        status,
-        started_at,
-        finished_at,
-        join_code,
-        quiz_id,
-        quizzes(title)
-      `)
-      .in("status", ["waiting", "active", "finished", "completed"])
+      .select(sessionSelect)
+      .eq("teacher_id", userId)
+      .in("status", reportStatuses)
       .order("started_at", { ascending: false });
 
+    let legacySessions: any[] = [];
+    let legacySessionsError: any = null;
+
     if (ownedQuizIds.length > 0) {
-      sessionsQuery = sessionsQuery.or(`teacher_id.eq.${userId},quiz_id.in.(${ownedQuizIds.join(",")})`);
-    } else {
-      sessionsQuery = sessionsQuery.eq("teacher_id", userId);
+      const { data, error } = await supabase
+        .from("live_sessions")
+        .select(sessionSelect)
+        .in("quiz_id", ownedQuizIds)
+        .in("status", reportStatuses)
+        .order("started_at", { ascending: false });
+      legacySessions = data || [];
+      legacySessionsError = error;
     }
 
-    const { data: sessions, error: sessionsError } = await sessionsQuery;
-
-    if (sessionsError) {
-      console.error("Failed to fetch report sessions:", sessionsError.message);
+    if (teacherSessionsError || legacySessionsError) {
+      console.error("Failed to fetch report sessions:", teacherSessionsError?.message || legacySessionsError?.message);
       setReportSessions([]);
       setLoadingReports(false);
       return;
     }
 
-    const sessionRows = sessions || [];
+    const mergedById = new Map<string, any>();
+    (teacherSessions || []).forEach((sessionRow: any) => {
+      mergedById.set(sessionRow.id, sessionRow);
+    });
+    legacySessions.forEach((sessionRow: any) => {
+      if (!mergedById.has(sessionRow.id)) {
+        mergedById.set(sessionRow.id, sessionRow);
+      }
+    });
+
+    const sessionRows = Array.from(mergedById.values()).sort((a: any, b: any) => {
+      const aTime = new Date(a.started_at || a.finished_at || 0).getTime();
+      const bTime = new Date(b.started_at || b.finished_at || 0).getTime();
+      return bTime - aTime;
+    });
+
     if (sessionRows.length === 0) {
       setReportSessions([]);
       setLoadingReports(false);
